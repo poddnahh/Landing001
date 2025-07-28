@@ -1,115 +1,132 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LilBesties - Your Source for Cute & Unique Creations!</title>
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Google Fonts - Inter -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-    <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #fcfcfc;
-        }
-        .btn-lilbesties {
-            @apply inline-block font-bold py-3 px-8 rounded-full text-xl transition duration-300 ease-in-out transform hover:scale-105 shadow-lg;
-            color: white;
-        }
-        .btn-etsy {
-            background-color: #f48fb1;
-            @apply hover:bg-pink-500;
-        }
-        .btn-website {
-            background-color: #81d4fa;
-            @apply hover:bg-blue-400;
-        }
-        .btn-facebook {
-            background-color: #90caf9;
-            @apply hover:bg-blue-500;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LilBesties - Your Source for Cute & Unique Creations!</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts - Inter -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #fcfcfc;
+    }
+    .btn-lilbesties {
+      @apply inline-block font-bold py-3 px-4 rounded-full text-xl transition duration-300 ease-in-out transform hover:scale-105 shadow-lg text-white text-center;
+    }
+    .btn-etsy {
+      background-color: #f48fb1;
+      @apply hover:bg-pink-500;
+    }
+    .btn-website {
+      background-color: #81d4fa;
+      @apply hover:bg-blue-400;
+    }
+    .btn-facebook {
+      background-color: #90caf9;
+      @apply hover:bg-blue-500;
+    }
+  </style>
 </head>
 <body class="antialiased text-gray-800">
-    <div class="min-h-screen flex flex-col items-center justify-center p-4">
-        <!-- Main Content Container -->
-        <div class="bg-white shadow-xl rounded-xl p-8 md:p-12 max-w-4xl w-full text-center border border-gray-100">
-            <!-- Business Title -->
-            <h1 class="text-4xl md:text-5xl font-extrabold text-pink-500 mb-4">
-                LilBesties
-            </h1>
-            <!-- Tagline/Slogan -->
-            <p class="text-xl md:text-2xl text-gray-600 mb-8">
-                Bringing smiles with adorable characters and unique gifts!
-            </p>
+  <div class="min-h-screen flex flex-col items-center justify-center p-4">
+    <!-- Main Content Container -->
+    <div class="bg-white shadow-xl rounded-xl p-8 md:p-12 max-w-4xl w-full text-center border border-gray-100">
+      <!-- Business Title -->
+      <h1 class="text-4xl md:text-5xl font-extrabold text-pink-500 mb-4">LilBesties</h1>
+      <!-- Tagline/Slogan -->
+      <p class="text-xl md:text-2xl text-gray-600 mb-8">
+        Bringing smiles with adorable characters and unique gifts!
+      </p>
 
-            <!-- Image and Description Block -->
-            <div class="max-w-3xl mx-auto">
-                <!-- Main Dress Image -->
-                <img src="https://poddnahh.github.io/Landing001/Dresses1.jpg"
-                     alt="LilBesties Dress Display"
-                     class="w-full h-auto rounded-lg shadow-md mx-auto object-cover border border-gray-200 mb-6">
+      <!-- Image and Description Block -->
+      <div class="max-w-3xl mx-auto">
+        <!-- Main Dress Image -->
+        <img
+          src="https://poddnahh.github.io/Landing001/Dresses1.jpg"
+          alt="LilBesties Dress Display"
+          class="w-full h-auto rounded-lg shadow-md mx-auto object-cover border border-gray-200 mb-6"
+        />
 
-                <!-- Business Description -->
-                <div class="text-lg md:text-xl text-gray-700 leading-relaxed px-6">
-                    <p class="mb-4">
-                        Welcome to LilBesties! We create a world of joy with our charming characters and delightful handcrafted items. Each piece is designed to bring a little extra happiness and a lot of personality to your day.
-                    </p>
-                    <p>
-                        Explore our collections for unique gifts, whimsical decor, and special treasures that are sure to make you smile!
-                    </p>
-                </div>
-            </div>
-
-            <!-- Key Selling Points Section -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 my-10">
-                <div class="bg-pink-50 p-6 rounded-lg shadow-sm border border-pink-100">
-                    <h3 class="text-2xl font-semibold text-pink-600 mb-3">
-                        <span class="text-3xl mr-2">🎨</span> Original Designs
-                    </h3>
-                    <p class="text-gray-600">Discover exclusive characters and artwork crafted with love.</p>
-                </div>
-                <div class="bg-blue-50 p-6 rounded-lg shadow-sm border border-blue-100">
-                    <h3 class="text-2xl font-semibold text-blue-600 mb-3">
-                        <span class="text-3xl mr-2">🎁</span> Perfect Gifts
-                    </h3>
-                    <p class="text-gray-600">Find the ideal present for friends, family, or yourself!</p>
-                </div>
-                <div class="bg-yellow-50 p-6 rounded-lg shadow-sm border border-yellow-100">
-                    <h3 class="text-2xl font-semibold text-yellow-600 mb-3">
-                        <span class="text-3xl mr-2">🌈</span> Quality & Joy
-                    </h3>
-                    <p class="text-gray-600">High-quality items made to spread happiness and cheer.</p>
-                </div>
-            </div>
-
-            <!-- Call to Action & Links -->
-            <div class="mt-8">
-                <p class="text-2xl font-semibold text-gray-700 mb-6">
-                    Find Your Favorite Bestie Here:
-                </p>
-                <div class="flex flex-col md:flex-row justify-center gap-4">
-                    <a href="https://www.etsy.com/shop/LilBestiesDesign" target="_blank" class="btn-lilbesties btn-etsy">
-                        Etsy
-                    </a>
-                    <a href="https://lilbesties.com/collections/all" target="_blank" class="btn-lilbesties btn-website">
-                        Website
-                    </a>
-                    <a href="https://www.facebook.com/100090806160603/about/?_rdr" target="_blank" class="btn-lilbesties btn-facebook">
-                        Facebook
-                    </a>
-                </div>
-                <p class="text-gray-500 mt-4 text-sm">
-                    (Click on a link above to discover our adorable collections!)
-                </p>
-            </div>
+        <!-- Business Description -->
+        <div class="text-lg md:text-xl text-gray-700 leading-relaxed px-6">
+          <p class="mb-4">
+            Welcome to LilBesties! We create a world of joy with our charming characters and delightful handcrafted items. Each piece is designed to bring a little extra happiness and a lot of personality to your day.
+          </p>
+          <p>
+            Explore our collections for unique gifts, whimsical decor, and special treasures that are sure to make you smile!
+          </p>
         </div>
+      </div>
 
-        <!-- Footer -->
-        <footer class="mt-8 text-gray-500 text-sm">
-            &copy; 2025 LilBesties. All rights reserved.
-        </footer>
+      <!-- Key Selling Points Section -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 my-10">
+        <div class="bg-pink-50 p-6 rounded-lg shadow-sm border border-pink-100">
+          <h3 class="text-2xl font-semibold text-pink-600 mb-3">
+            <span class="text-3xl mr-2">🎨</span> Original Designs
+          </h3>
+          <p class="text-gray-600">
+            Discover exclusive characters and artwork crafted with love.
+          </p>
+        </div>
+        <div class="bg-blue-50 p-6 rounded-lg shadow-sm border border-blue-100">
+          <h3 class="text-2xl font-semibold text-blue-600 mb-3">
+            <span class="text-3xl mr-2">🎁</span> Perfect Gifts
+          </h3>
+          <p class="text-gray-600">
+            Find the ideal present for friends, family, or yourself!
+          </p>
+        </div>
+        <div class="bg-yellow-50 p-6 rounded-lg shadow-sm border border-yellow-100">
+          <h3 class="text-2xl font-semibold text-yellow-600 mb-3">
+            <span class="text-3xl mr-2">🌈</span> Quality & Joy
+          </h3>
+          <p class="text-gray-600">
+            High-quality items made to spread happiness and cheer.
+          </p>
+        </div>
+      </div>
+
+      <!-- Call to Action & Selling Platform Links -->
+      <div class="mt-8">
+        <p class="text-2xl font-semibold text-gray-700 mb-6">
+          Find Your Favorite Bestie Here:
+        </p>
+        <div class="flex flex-col md:flex-row justify-center gap-4">
+          <a
+            href="https://www.etsy.com/shop/LilBestiesDesign"
+            target="_blank"
+            class="btn-lilbesties btn-etsy w-40"
+          >
+            Etsy
+          </a>
+          <a
+            href="https://lilbesties.com/collections/all"
+            target="_blank"
+            class="btn-lilbesties btn-website w-40"
+          >
+            Website
+          </a>
+          <a
+            href="https://www.facebook.com/100090806160603/about/?_rdr"
+            target="_blank"
+            class="btn-lilbesties btn-facebook w-40"
+          >
+            Facebook
+          </a>
+        </div>
+        <p class="text-gray-500 mt-4 text-sm">
+          (Click on a link above to discover our adorable collections!)
+        </p>
+      </div>
     </div>
+
+    <!-- Footer -->
+    <footer class="mt-8 text-gray-500 text-sm">
+      &copy; 2025 LilBesties. All rights reserved.
+    </footer>
+  </div>
 </body>
 </html>
