@@ -3,87 +3,120 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sara Billiot Site</title>
+    <title>LilBesties - Your Source for Cute & Unique Creations!</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Google Fonts - Inter -->
-    <link href="https://lilbesties.com/">
+    <!-- Google Fonts - Inter (or a more playful sans-serif if preferred, but Inter is clean) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f0f4f8; /* Light blue-gray background */
+            font-family: 'Inter', sans-serif; /* A clean, modern sans-serif */
+            background-color: #fcfcfc; /* Very light, almost white background */
+        }
+        /* Custom button styles for softer look */
+        .btn-lilbesties {
+            @apply inline-block font-bold py-3 px-8 rounded-full text-xl transition duration-300 ease-in-out transform hover:scale-105 shadow-lg;
+            color: white; /* Ensure text is white for contrast */
+        }
+        .btn-etsy {
+            background-color: #f48fb1; /* Soft pink */
+            @apply hover:bg-pink-500;
+        }
+        .btn-website {
+            background-color: #81d4fa; /* Soft blue */
+            @apply hover:bg-blue-400;
+        }
+        .btn-shopify {
+            background-color: #a5d6a7; /* Soft green */
+            @apply hover:bg-green-400;
         }
     </style>
 </head>
 <body class="antialiased text-gray-800">
     <div class="min-h-screen flex flex-col items-center justify-center p-4">
         <!-- Main Content Container -->
-        <div class="bg-white shadow-lg rounded-xl p-8 md:p-12 max-w-4xl w-full text-center">
-            <!-- Project Title -->
-            <h1 class="text-4xl md:text-5xl font-extrabold text-blue-700 mb-4">
-                RoboLearn
+        <div class="bg-white shadow-xl rounded-xl p-8 md:p-12 max-w-4xl w-full text-center border border-gray-100">
+            <!-- Business Title -->
+            <h1 class="text-4xl md:text-5xl font-extrabold text-pink-500 mb-4">
+                LilBesties
             </h1>
             <!-- Tagline/Slogan -->
             <p class="text-xl md:text-2xl text-gray-600 mb-8">
-                Empowering the next generation with intelligent, interactive learning robots.
+                Bringing smiles with adorable characters and unique gifts!
             </p>
 
             <!-- Hero Image/Illustration Placeholder -->
             <div class="mb-10">
-                <img src="https://placehold.co/800x450/e0f2fe/000000?text=Your+Learning+Robot+Here"
-                     alt="Illustration of a small learning robot"
-                     class="w-full h-auto rounded-lg shadow-md mx-auto object-cover"
-                     onerror="this.onerror=null;this.src='https://placehold.co/800x450/e0f2fe/000000?text=Robot+Illustration';"
+                <img src="https://placehold.co/800x450/ffebee/000000?text=Your+Cute+Characters+Here"
+                     alt="Illustration of cute characters or products"
+                     class="w-full h-auto rounded-lg shadow-md mx-auto object-cover border border-gray-200"
+                     onerror="this.onerror=null;this.src='https://placehold.co/800x450/ffebee/000000?text=Adorable+Creations';"
                 >
             </div>
 
-            <!-- Project Description -->
+            <!-- Business Description -->
             <div class="text-lg md:text-xl text-gray-700 leading-relaxed mb-10">
                 <p class="mb-4">
-                    At RoboLearn, we're passionate about making robotics accessible and fun for everyone. Our small, intuitive learning robots are designed to introduce fundamental concepts of coding, AI, and engineering through hands-on play.
+                    Welcome to LilBesties! We create a world of joy with our charming characters and delightful handcrafted items. Each piece is designed to bring a little extra happiness and a lot of personality to your day.
                 </p>
                 <p>
-                    Whether for curious kids, aspiring engineers, or lifelong learners, our robots provide an engaging platform to explore the exciting world of technology.
+                    Explore our collections for unique gifts, whimsical decor, and special treasures that are sure to make you smile!
                 </p>
             </div>
 
-            <!-- Key Features Section -->
+            <!-- Key Selling Points Section -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-                <div class="bg-blue-50 p-6 rounded-lg shadow-sm">
-                    <h3 class="text-2xl font-semibold text-blue-600 mb-3">
-                        <span class="text-3xl mr-2">🤖</span> Easy to Learn
+                <div class="bg-pink-50 p-6 rounded-lg shadow-sm border border-pink-100">
+                    <h3 class="text-2xl font-semibold text-pink-600 mb-3">
+                        <span class="text-3xl mr-2">🎨</span> Original Designs
                     </h3>
-                    <p class="text-gray-600">Simple interface and guided lessons make learning a breeze.</p>
+                    <p class="text-gray-600">Discover exclusive characters and artwork crafted with love.</p>
                 </div>
-                <div class="bg-blue-50 p-6 rounded-lg shadow-sm">
+                <div class="bg-blue-50 p-6 rounded-lg shadow-sm border border-blue-100">
                     <h3 class="text-2xl font-semibold text-blue-600 mb-3">
-                        <span class="text-3xl mr-2">🧠</span> Smart & Interactive
+                        <span class="text-3xl mr-2">🎁</span> Perfect Gifts
                     </h3>
-                    <p class="text-gray-600">Responds to commands and adapts to your learning pace.</p>
+                    <p class="text-gray-600">Find the ideal present for friends, family, or yourself!</p>
                 </div>
-                <div class="bg-blue-50 p-6 rounded-lg shadow-sm">
-                    <h3 class="text-2xl font-semibold text-blue-600 mb-3">
-                        <span class="text-3xl mr-2">🛠️</span> Build & Customize
+                <div class="bg-yellow-50 p-6 rounded-lg shadow-sm border border-yellow-100">
+                    <h3 class="text-2xl font-semibold text-yellow-600 mb-3">
+                        <span class="text-3xl mr-2">🌈</span> Quality & Joy
                     </h3>
-                    <p class="text-gray-600">Modular design allows for endless creativity and upgrades.</p>
+                    <p class="text-gray-600">High-quality items made to spread happiness and cheer.</p>
                 </div>
             </div>
 
-            <!-- Call to Action -->
+            <!-- Call to Action & Selling Platform Links -->
             <div class="mt-8">
-                <a href="#"
-                   class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-full text-xl transition duration-300 ease-in-out transform hover:scale-105 shadow-lg">
-                    Discover Our Robots
-                </a>
+                <p class="text-2xl font-semibold text-gray-700 mb-6">
+                    Find Your Favorite Bestie Here:
+                </p>
+                <div class="flex flex-col md:flex-row justify-center gap-4">
+                    <a href="[Your Etsy Shop Link]"
+                       target="_blank"
+                       class="btn-lilbesties btn-etsy">
+                        Shop on Etsy
+                    </a>
+                    <a href="[Your Website Link]"
+                       target="_blank"
+                       class="btn-lilbesties btn-website">
+                        Visit Our Main Shop
+                    </a>
+                    <a href="[Your Shopify Shop Link]"
+                       target="_blank"
+                       class="btn-lilbesties btn-shopify">
+                        Shop on Shopify
+                    </a>
+                </div>
                 <p class="text-gray-500 mt-4 text-sm">
-                    (Link to your project details or contact page)
+                    (Click on a link above to discover our adorable collections!)
                 </p>
             </div>
         </div>
 
         <!-- Footer -->
         <footer class="mt-8 text-gray-500 text-sm">
-            &copy; 2025 RoboLearn. All rights reserved.
+            &copy; 2025 LilBesties. All rights reserved.
         </footer>
     </div>
 </body>
