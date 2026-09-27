@@ -546,6 +546,7 @@ async function viewHome(root) {
       <button class="iconbtn photo-ico" data-action="compose" data-kind="photo" aria-label="Photo">${icon('image')}</button>
     </div>
     ${storyCards()}
+    ${S.people.length < 4 ? inviteCard() : ''}
 
     ${helpAlerts.map((a) => `<div class="card alert">
       <div class="row">${avatar(person(a.personId))}<div class="grow"><b>${esc(nameOf(a.personId))} asked for help</b><br><span class="small">${esc(a.troubling || a.note || 'They could use someone right now.')}</span></div></div>
@@ -564,7 +565,7 @@ async function viewHome(root) {
     ${letters.length ? `<div class="card leaf row" data-action="letters-to-me" style="cursor:pointer"><span style="font-size:1.8rem">💌</span><div class="grow"><b>You have ${letters.length} letter${letters.length > 1 ? 's' : ''}</b><br><span class="small">Written just for you.</span></div><span>›</span></div>` : ''}
 
     <div class="shortcuts">
-      ${[['tell-story', '🎬', 'Tell a story'], ['legacy', '🕯️', 'Legacy'], ['ask-family', '❓', 'Ask family'], ['write-letter', '💌', 'Letters'], ['games', '🎲', 'Games'], ['books', '📖', 'Memory books']]
+      ${[['tell-story', '🎬', 'Tell a story'], ['legacy', '🕯️', 'Legacy'], ['ask-family', '❓', 'Ask family'], ['invite', '💌', 'Invite family'], ['games', '🎲', 'Games'], ['books', '📖', 'Memory books']]
         .map(([a, e, l]) => `<button data-action="${a}"><span>${e}</span>${l}</button>`).join('')}
     </div>
 
@@ -719,6 +720,7 @@ function viewFamily(root) {
   root.innerHTML = `${fbHead('Family', roundBtn('add-person', 'plus', 'Add family') + roundBtn('search', 'search', 'Search') + chatBtn())}
     ${pills([['family', 'Your family'], ['birthdays', 'Birthdays'], ['tree', 'Family tree'], ['books', 'Memory books']], tab, 'fam-tab')}
     ${storyCards()}
+    ${tab === 'family' ? inviteCard() : ''}
     ${body}`;
 }
 actions['fam-tab'] = ({ v }) => { S.famTab = v; render(); };
@@ -845,6 +847,8 @@ function renderWelcome(app) {
       <div style="text-align:right"><button class="btn sm" data-action="display">Aa  Make text bigger</button></div>
       <div class="hero">🌳</div>
       <h1>${esc(CONFIG.appName)}</h1>
+      ${S.invitedBy ? `<div class="card leaf center"><b style="font-size:1.15rem">💌 ${esc(S.invitedBy)} invited you to join the family</b><br><span class="small">${owns('*') ? 'Your access is <b>free</b> — everything is unlocked.' : 'Welcome!'}</span></div>` : ''}
+      ${IS_IOS && !navigator.standalone ? `<div class="card small"><b>📲 Put UnMe on your home screen</b><br>In Safari, tap the Share button <b>⎋</b> at the bottom, then <b>“Add to Home Screen”</b>. Then open UnMe from your home screen.</div>` : ''}
       <p class="center muted">The place your family tells its story — so no one ever wonders<br>“I wish I had known them better.”</p>
       <div class="card stack">
         <div class="row"><span style="font-size:1.4rem">💬</span><div><b>1–2 questions a day</b><br><span class="muted small">Little by little, your family learns who you really are.</span></div></div>
@@ -2674,11 +2678,44 @@ async function shareLink(title, text, url) {
   try { await navigator.clipboard.writeText(`${text} ${url}`); toast('Link copied — paste it anywhere 📋'); } catch { prompt('Copy this link:', url); }
 }
 
+// Family invite: a ready-to-send text message with the free link.
+const inviteLink = () => appURL({ gift: CONFIG.familyGiftCode, ref: me()?.name });
+const inviteText = () => `${me()?.name ? `It's ${me().name}! ` : ''}I'm using UnMe to save our family's stories — videos, voice memories and answers about our lives, all in one place. Join our family, it's free for us 💛\n\n${inviteLink()}\n\nOn iPhone: open it in Safari, tap Share, then "Add to Home Screen".`;
+// iPhones want "sms:&body=", Android wants "sms:?body=".
+const smsHref = (text) => `sms:${IS_IOS ? '&' : '?'}body=${encodeURIComponent(text)}`;
+
+function inviteCard() {
+  if (!CONFIG.familyGiftCode) return '';
+  return `<div class="card invite">
+    <div class="row"><span style="font-size:2rem">💌</span><div class="grow"><b>Invite your family — it's free</b><div class="small muted">They'll get UnMe free and can start sharing their stories.</div></div></div>
+    <div class="row" style="margin-top:10px">
+      <a class="btn primary grow" href="${smsHref(inviteText())}">💬 Text an invite</a>
+      <button class="btn gray" data-action="share-family" aria-label="More ways to share">More…</button>
+    </div></div>`;
+}
+
+actions.invite = () => {
+  openSheet(`${head('💌 Invite your family')}
+    <p>Send this text to anyone in your family. Tapping the link gives them UnMe <b>free</b>.</p>
+    <div class="card small" style="white-space:pre-wrap">${esc(inviteText())}</div>
+    <a class="btn primary block" href="${smsHref(inviteText())}">💬 Open Messages</a>
+    <div class="row" style="margin-top:10px">
+      <button class="btn grow" data-action="copy-invite">📋 Copy message</button>
+      <button class="btn grow" data-action="share-family">📤 Other apps</button>
+    </div>
+    <p class="small muted" style="margin-top:12px">You pick who to send it to in Messages. You can send it to several people at once.</p>`);
+};
+actions['copy-invite'] = async () => {
+  try { await navigator.clipboard.writeText(inviteText()); toast('Copied — paste it in any message 📋'); }
+  catch { prompt('Copy this message:', inviteText()); }
+};
+
 actions.share = () => {
   const name = me()?.name || '';
   openSheet(`${head('📤 Share UnMe')}
     ${CONFIG.familyGiftCode ? `<div class="card leaf"><b>🎁 Free for your family</b><p class="small">Send this link to family and close friends. It unlocks everything for free.</p>
-      <button class="btn leaf block" data-action="share-family">Send free family link</button></div>` : ''}
+      <a class="btn leaf block" href="${smsHref(inviteText())}">💬 Text a free invite</a>
+      <div class="row" style="margin-top:8px"><button class="btn sm grow" data-action="copy-invite">📋 Copy invite</button><button class="btn sm grow" data-action="share-family">📤 Other apps</button></div></div>` : ''}
     <div class="card"><b>💛 Tell your friends</b><p class="small">Know someone who'd want to keep their family's stories? Send them UnMe — it's just $${CONFIG.basePrice}, once.</p>
       <button class="btn primary block" data-action="share-friends">Recommend to a friend</button>
       <div class="row" style="margin-top:10px">
@@ -2688,7 +2725,7 @@ actions.share = () => {
       </div></div>`);
 };
 actions['share-family'] = () => shareLink('Join our family on UnMe',
-  `${me()?.name || 'I'} invited you to our family on UnMe — your access is free 💛`, appURL({ gift: CONFIG.familyGiftCode, ref: me()?.name }));
+  `${me()?.name || 'I'} invited you to our family on UnMe — your access is free 💛`, inviteLink());
 actions['share-friends'] = () => shareLink('UnMe', 'Save your family\'s stories before they\'re lost — I love this app:', landingURL({ ref: me()?.name }));
 
 // ── Store & Marketplace ──────────────────────────────────────
@@ -3166,7 +3203,7 @@ async function handleURL() {
     changed = true;
   }
   const ref = params.get('ref');
-  if (ref) { await db.setKV('referredBy', ref); changed = true; }
+  if (ref) { await db.setKV('referredBy', ref); S.invitedBy = ref; changed = true; }
   if (changed) history.replaceState(null, '', location.pathname);
 }
 
@@ -3175,6 +3212,7 @@ async function handleURL() {
   devicePrefs = { ...DEFAULT_PREFS, ...(await db.getKV('prefs', {})) };
   applyPrefs();
   await handleURL();
+  S.invitedBy = S.invitedBy || (await db.getKV('referredBy', ''));
   S.alertsSeen = S.meId ? await db.getKV(`alertsSeen:${S.meId}`, 0) : 0;
   S.chatsSeen = S.meId ? await db.getKV(`chatsSeen:${S.meId}`, 0) : 0;
   await render();
