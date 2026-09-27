@@ -1,0 +1,17 @@
+{
+  "name": "UnMe — Family Stories & Memories",
+  "short_name": "UnMe",
+  "description": "Tell your family who you really are, one question a day. Stories, videos, a family tree and memory books that last forever.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fbf6f0",
+  "theme_color": "#c2553d",
+  "categories": ["lifestyle", "social", "family"],
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
