@@ -88,6 +88,28 @@ function pickPhoto(maxSize = 1000) {
   });
 }
 
+// Save a recording. If the phone refuses (usually storage is full), never lose it:
+// offer to save the file to the phone instead. Returns the media id, or null.
+async function saveMediaSafe(blob, label = 'recording') {
+  const id = uid();
+  try {
+    await db.put('media', { id, blob, type: blob.type });
+    return id;
+  } catch (err) {
+    const ext = (blob.type || '').includes('mp4') ? 'mp4' : (blob.type || '').startsWith('audio') ? 'webm' : (blob.type || '').startsWith('image') ? 'jpg' : 'webm';
+    const name = `UnMe-${label.replace(/[^\w]+/g, '-')}-${today()}.${ext}`;
+    await new Promise((resolve) => {
+      const sheet = openSheet(`${head('Keep this recording safe')}
+        <p>Your phone didn't let UnMe store this ${esc(label)} — its storage may be full.</p>
+        <p><b>Please save it to your phone now so it isn't lost.</b> You can add it back later with the 📎 or gallery button.</p>
+        <button class="btn primary block" id="dl">⬇️ Save to my phone</button>
+        <p class="small muted" style="margin-top:10px">Tip: deleting old videos or photos on the phone frees up space.</p>`, { onClose: resolve });
+      $('#dl', sheet).onclick = () => { download(name, blob); toast('Saved to your phone ✓'); };
+    });
+    return null;
+  }
+}
+
 async function storePhoto(blob) {
   const id = uid();
   await db.put('media', { id, blob, type: blob.type || 'image/jpeg' });
@@ -524,6 +546,7 @@ async function viewHome(root) {
       <button class="iconbtn photo-ico" data-action="compose" data-kind="photo" aria-label="Photo">${icon('image')}</button>
     </div>
     ${storyCards()}
+    ${S.people.length < 4 ? inviteCard() : ''}
 
     ${helpAlerts.map((a) => `<div class="card alert">
       <div class="row">${avatar(person(a.personId))}<div class="grow"><b>${esc(nameOf(a.personId))} asked for help</b><br><span class="small">${esc(a.troubling || a.note || 'They could use someone right now.')}</span></div></div>
@@ -542,7 +565,7 @@ async function viewHome(root) {
     ${letters.length ? `<div class="card leaf row" data-action="letters-to-me" style="cursor:pointer"><span style="font-size:1.8rem">💌</span><div class="grow"><b>You have ${letters.length} letter${letters.length > 1 ? 's' : ''}</b><br><span class="small">Written just for you.</span></div><span>›</span></div>` : ''}
 
     <div class="shortcuts">
-      ${[['tell-story', '🎬', 'Tell a story'], ['legacy', '🕯️', 'Legacy'], ['ask-family', '❓', 'Ask family'], ['write-letter', '💌', 'Letters'], ['games', '🎲', 'Games'], ['books', '📖', 'Memory books']]
+      ${[['tell-story', '🎬', 'Tell a story'], ['legacy', '🕯️', 'Legacy'], ['ask-family', '❓', 'Ask family'], ['invite', '💌', 'Invite family'], ['games', '🎲', 'Games'], ['books', '📖', 'Memory books']]
         .map(([a, e, l]) => `<button data-action="${a}"><span>${e}</span>${l}</button>`).join('')}
     </div>
 
@@ -697,6 +720,7 @@ function viewFamily(root) {
   root.innerHTML = `${fbHead('Family', roundBtn('add-person', 'plus', 'Add family') + roundBtn('search', 'search', 'Search') + chatBtn())}
     ${pills([['family', 'Your family'], ['birthdays', 'Birthdays'], ['tree', 'Family tree'], ['books', 'Memory books']], tab, 'fam-tab')}
     ${storyCards()}
+    ${tab === 'family' ? inviteCard() : ''}
     ${body}`;
 }
 actions['fam-tab'] = ({ v }) => { S.famTab = v; render(); };
@@ -823,6 +847,8 @@ function renderWelcome(app) {
       <div style="text-align:right"><button class="btn sm" data-action="display">Aa  Make text bigger</button></div>
       <div class="hero">🌳</div>
       <h1>${esc(CONFIG.appName)}</h1>
+      ${S.invitedBy ? `<div class="card leaf center"><b style="font-size:1.15rem">💌 ${esc(S.invitedBy)} invited you to join the family</b><br><span class="small">${owns('*') ? 'Your access is <b>free</b> — everything is unlocked.' : 'Welcome!'}</span></div>` : ''}
+      ${IS_IOS && !navigator.standalone ? `<div class="card small"><b>📲 Put UnMe on your home screen</b><br>In Safari, tap the Share button <b>⎋</b> at the bottom, then <b>“Add to Home Screen”</b>. Then open UnMe from your home screen.</div>` : ''}
       <p class="center muted">The place your family tells its story — so no one ever wonders<br>“I wish I had known them better.”</p>
       <div class="card stack">
         <div class="row"><span style="font-size:1.4rem">💬</span><div><b>1–2 questions a day</b><br><span class="muted small">Little by little, your family learns who you really are.</span></div></div>
@@ -1275,8 +1301,8 @@ function openComposer({ type, question, rec, personId = S.meId, prefill = '', ti
     };
     if (question) { post.questionId = question.id; post.questionText = question.text; post.category = question.category; if (question.fromId) post.askedBy = question.fromId; }
     if (media) {
-      const mid = uid();
-      await db.put('media', { id: mid, blob: media.blob, type: media.blob.type });
+      const mid = await saveMediaSafe(media.blob, 'memory');
+      if (!mid) return;
       post.mediaId = mid;
       post.mediaType = media.kind;
       if (type === 'story' && media.kind === 'image') post.type = 'photo';
@@ -1320,6 +1346,10 @@ actions['browse-questions'] = () => {
 // { mode: 'text' | 'more' } or null. With opts.transcribe, live captions are written
 // into opts.segments as [{ t: secondsFromStart, text }].
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+// iPhones and iPads can't run speech recognition and the camera microphone at the same
+// time — doing both can freeze a recording — so live captions are off there.
+const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const CAN_CAPTION = !!SpeechRec && !IS_IOS;
 const fmtClock = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
 function camera(opts = {}) {
@@ -1330,7 +1360,7 @@ function camera(opts = {}) {
     const durs = allDurs.filter((d) => !opts.maxSec || d.s <= opts.maxSec || opts.modes);
     let maxSec = opts.maxSec || 60;
     if (!durs.some((d) => d.s === maxSec)) durs.unshift({ s: maxSec, label: maxSec >= 60 ? `${Math.round(maxSec / 60)}m` : `${maxSec}s` });
-    let photo = false, prompt = opts.prompt || '', useTimer = false, cc = opts.transcribe !== false && !!SpeechRec;
+    let photo = false, prompt = opts.prompt || '', useTimer = false, cc = opts.transcribe !== false && CAN_CAPTION;
     let stream, recorder, chunks = [], timer, result = null, facing = 'user', sr = null, recording = false, t0 = 0, seconds = 0;
 
     const sheet = openSheet(`<div class="cam">
@@ -1346,7 +1376,7 @@ function camera(opts = {}) {
       <div class="cam-rail" id="rail">
         <button class="cam-rb" id="flip">${icon('flip')}<span>Flip</span></button>
         <button class="cam-rb" id="tmr">${icon('timer')}<span>3s timer</span></button>
-        ${SpeechRec && opts.transcribe !== false ? `<button class="cam-rb ${cc ? 'on' : ''}" id="ccb">${icon('cc')}<span>Captions</span></button>` : ''}
+        ${CAN_CAPTION && opts.transcribe !== false ? `<button class="cam-rb ${cc ? 'on' : ''}" id="ccb">${icon('cc')}<span>Captions</span></button>` : ''}
       </div>
       <div class="cam-prompt ${prompt ? '' : 'hidden'}" id="cprompt">${esc(prompt)}</div>
       <div class="cam-caption hidden" id="ccap"></div>
@@ -1424,11 +1454,33 @@ function camera(opts = {}) {
       try { sr.start(); } catch { sr = null; }
     }
 
+    let finalized = false, watchdog = null, recMime = '';
+    // Turn whatever was recorded into the review screen — exactly once.
+    function finalize() {
+      if (finalized) return;
+      finalized = true;
+      clearTimeout(watchdog);
+      rec.classList.remove('stop');
+      sheet.classList.remove('recording');
+      if (!chunks.length) {
+        setStatus('Sorry — that recording didn\'t come through. Please tap the red button to try again.');
+        startStream();
+        return;
+      }
+      showReview(new Blob(chunks, { type: recMime || `${kind}/webm` }), kind);
+    }
+
     function stop() {
       clearInterval(timer);
+      const wasRecording = recording;
       recording = false;
       try { sr?.stop(); } catch { /* ignore */ }
-      if (recorder && recorder.state !== 'inactive') recorder.stop();
+      if (recorder && recorder.state !== 'inactive') {
+        try { recorder.requestData?.(); } catch { /* ignore */ }
+        try { recorder.stop(); } catch { finalize(); }
+      }
+      // Some phones never fire "stop" — don't leave anyone stuck.
+      if (wasRecording) { setStatus('Finishing up…'); watchdog = setTimeout(finalize, 3500); }
     }
 
     function showReview(blob, k) {
@@ -1465,13 +1517,18 @@ function camera(opts = {}) {
       segments.length = 0;
       const types = kind === 'video' ? ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'] : ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'];
       const mimeType = types.find((t) => window.MediaRecorder?.isTypeSupported?.(t));
-      try { recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined); } catch { setStatus('Recording is not supported here — try uploading.'); return; }
-      recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-      recorder.onstop = () => {
-        rec.classList.remove('stop');
-        sheet.classList.remove('recording');
-        showReview(new Blob(chunks, { type: recorder.mimeType || mimeType || `${kind}/webm` }), kind);
-      };
+      // Modest bitrates keep a 10-minute story around 100 MB instead of many hundreds.
+      const bitrate = kind === 'video' ? { videoBitsPerSecond: 1_200_000, audioBitsPerSecond: 96_000 } : { audioBitsPerSecond: 96_000 };
+      try { recorder = new MediaRecorder(stream, { ...(mimeType ? { mimeType } : {}), ...bitrate }); } catch {
+        try { recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined); } catch { setStatus('Recording is not supported here — try uploading.'); return; }
+      }
+      finalized = false;
+      recMime = recorder.mimeType || mimeType || '';
+      recorder.ondataavailable = (e) => e.data && e.data.size && chunks.push(e.data);
+      recorder.onstop = () => setTimeout(finalize, 50); // let the last piece of data arrive first
+      recorder.onerror = () => { recording = false; clearInterval(timer); finalize(); };
+      // A phone call, locking the phone or another app taking the camera ends the tracks.
+      stream.getTracks().forEach((t) => { t.onended = () => { if (recording) stop(); }; });
       recorder.start(1000);
       recording = true;
       rec.classList.add('stop');
@@ -1531,6 +1588,7 @@ function camera(opts = {}) {
       $c('#pp').textContent = prompt ? '💬 Change question' : '💬 Add a question';
     };
     $c('#x').onclick = () => {
+      if (recording) { stop(); return; } // finish and show what was recorded, don't lose it
       if (result?.blob && !confirm('Throw away this recording?')) return;
       result = null; closeSheet();
     };
@@ -1810,8 +1868,8 @@ function openRecapEditor(post, blob = null) {
       highlights: highlights.filter((h) => h.text.trim()),
     };
     if (blob) {
-      const mid = uid();
-      await db.put('media', { id: mid, blob, type: blob.type });
+      const mid = await saveMediaSafe(blob, post.title || 'story');
+      if (!mid) return;
       post.mediaId = mid;
     }
     await save('posts', post);
@@ -2109,8 +2167,8 @@ actions['video-msg'] = async ({ id }) => {
   if (!guard()) return;
   const blob = await recordMedia('video', { maxSec: 60, title: 'Video message' });
   if (!blob) return;
-  const mid = uid();
-  await db.put('media', { id: mid, blob, type: blob.type });
+  const mid = await saveMediaSafe(blob, 'video message');
+  if (!mid) return;
   await save('messages', { id: uid(), chatId: id, personId: S.meId, text: '', mediaId: mid, mediaType: 'video', createdAt: Date.now() });
   toast('Video message sent 🎥');
   if (S.tab === 'chats') render();
@@ -2620,11 +2678,44 @@ async function shareLink(title, text, url) {
   try { await navigator.clipboard.writeText(`${text} ${url}`); toast('Link copied — paste it anywhere 📋'); } catch { prompt('Copy this link:', url); }
 }
 
+// Family invite: a ready-to-send text message with the free link.
+const inviteLink = () => appURL({ gift: CONFIG.familyGiftCode, ref: me()?.name });
+const inviteText = () => `${me()?.name ? `It's ${me().name}! ` : ''}I'm using UnMe to save our family's stories — videos, voice memories and answers about our lives, all in one place. Join our family, it's free for us 💛\n\n${inviteLink()}\n\nOn iPhone: open it in Safari, tap Share, then "Add to Home Screen".`;
+// iPhones want "sms:&body=", Android wants "sms:?body=".
+const smsHref = (text) => `sms:${IS_IOS ? '&' : '?'}body=${encodeURIComponent(text)}`;
+
+function inviteCard() {
+  if (!CONFIG.familyGiftCode) return '';
+  return `<div class="card invite">
+    <div class="row"><span style="font-size:2rem">💌</span><div class="grow"><b>Invite your family — it's free</b><div class="small muted">They'll get UnMe free and can start sharing their stories.</div></div></div>
+    <div class="row" style="margin-top:10px">
+      <a class="btn primary grow" href="${smsHref(inviteText())}">💬 Text an invite</a>
+      <button class="btn gray" data-action="share-family" aria-label="More ways to share">More…</button>
+    </div></div>`;
+}
+
+actions.invite = () => {
+  openSheet(`${head('💌 Invite your family')}
+    <p>Send this text to anyone in your family. Tapping the link gives them UnMe <b>free</b>.</p>
+    <div class="card small" style="white-space:pre-wrap">${esc(inviteText())}</div>
+    <a class="btn primary block" href="${smsHref(inviteText())}">💬 Open Messages</a>
+    <div class="row" style="margin-top:10px">
+      <button class="btn grow" data-action="copy-invite">📋 Copy message</button>
+      <button class="btn grow" data-action="share-family">📤 Other apps</button>
+    </div>
+    <p class="small muted" style="margin-top:12px">You pick who to send it to in Messages. You can send it to several people at once.</p>`);
+};
+actions['copy-invite'] = async () => {
+  try { await navigator.clipboard.writeText(inviteText()); toast('Copied — paste it in any message 📋'); }
+  catch { prompt('Copy this message:', inviteText()); }
+};
+
 actions.share = () => {
   const name = me()?.name || '';
   openSheet(`${head('📤 Share UnMe')}
     ${CONFIG.familyGiftCode ? `<div class="card leaf"><b>🎁 Free for your family</b><p class="small">Send this link to family and close friends. It unlocks everything for free.</p>
-      <button class="btn leaf block" data-action="share-family">Send free family link</button></div>` : ''}
+      <a class="btn leaf block" href="${smsHref(inviteText())}">💬 Text a free invite</a>
+      <div class="row" style="margin-top:8px"><button class="btn sm grow" data-action="copy-invite">📋 Copy invite</button><button class="btn sm grow" data-action="share-family">📤 Other apps</button></div></div>` : ''}
     <div class="card"><b>💛 Tell your friends</b><p class="small">Know someone who'd want to keep their family's stories? Send them UnMe — it's just $${CONFIG.basePrice}, once.</p>
       <button class="btn primary block" data-action="share-friends">Recommend to a friend</button>
       <div class="row" style="margin-top:10px">
@@ -2634,7 +2725,7 @@ actions.share = () => {
       </div></div>`);
 };
 actions['share-family'] = () => shareLink('Join our family on UnMe',
-  `${me()?.name || 'I'} invited you to our family on UnMe — your access is free 💛`, appURL({ gift: CONFIG.familyGiftCode, ref: me()?.name }));
+  `${me()?.name || 'I'} invited you to our family on UnMe — your access is free 💛`, inviteLink());
 actions['share-friends'] = () => shareLink('UnMe', 'Save your family\'s stories before they\'re lost — I love this app:', landingURL({ ref: me()?.name }));
 
 // ── Store & Marketplace ──────────────────────────────────────
@@ -3112,7 +3203,7 @@ async function handleURL() {
     changed = true;
   }
   const ref = params.get('ref');
-  if (ref) { await db.setKV('referredBy', ref); changed = true; }
+  if (ref) { await db.setKV('referredBy', ref); S.invitedBy = ref; changed = true; }
   if (changed) history.replaceState(null, '', location.pathname);
 }
 
@@ -3121,6 +3212,7 @@ async function handleURL() {
   devicePrefs = { ...DEFAULT_PREFS, ...(await db.getKV('prefs', {})) };
   applyPrefs();
   await handleURL();
+  S.invitedBy = S.invitedBy || (await db.getKV('referredBy', ''));
   S.alertsSeen = S.meId ? await db.getKV(`alertsSeen:${S.meId}`, 0) : 0;
   S.chatsSeen = S.meId ? await db.getKV(`chatsSeen:${S.meId}`, 0) : 0;
   await render();

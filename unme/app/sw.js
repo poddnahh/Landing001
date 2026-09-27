@@ -1,5 +1,5 @@
 // Offline support: serve the app shell from cache, refresh it in the background.
-const CACHE = 'unme-v6';
+const CACHE = 'unme-v8';
 const SHELL = ['./', './index.html', './styles.css', './js/app.js', './js/db.js', './js/content.js', './js/config.js', './js/catalog.js', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {

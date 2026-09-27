@@ -823,3 +823,5 @@ body.ui-dark .plus-btn { background: #fff; color: #000; }
 h1, h2, h3, .sheet-head h2 { font-family: var(--font); font-weight: 800; letter-spacing: -.01em; }
 .whats { border-radius: 22px; line-height: 1.3; }
 .scard { width: min(7.2rem, 128px); height: min(12rem, 214px); }
+.card.invite { background: var(--fb-blue-soft); border-color: transparent; }
+a.btn { text-decoration: none; }
