@@ -2,7 +2,7 @@ import { db, uid, exportBundle, importBundle, blobToDataURL } from './db.js';
 import { CONFIG } from './config.js';
 import {
   CATEGORIES, DAILY_QUESTIONS, LEGACY_INTERVIEW, LETTER_OCCASIONS, PACKS,
-  WOULD_YOU_RATHER, STORY_STARTERS, MOODS, RELATIONS, AVATAR_EMOJI,
+  WOULD_YOU_RATHER, STORY_STARTERS, STORY_PROMPTS, MOODS, RELATIONS, AVATAR_EMOJI,
 } from './content.js';
 
 // ── State ─────────────────────────────────────────────────────
@@ -387,6 +387,7 @@ async function viewHome(root) {
     ${letters.length ? `<div class="card leaf row" data-action="letters-to-me" style="cursor:pointer"><span style="font-size:1.8rem">💌</span><div class="grow"><b>You have ${letters.length} letter${letters.length > 1 ? 's' : ''}</b><br><span class="small">Written just for you.</span></div><span>›</span></div>` : ''}
 
     <div class="grid2">
+      ${tile('tell-story', '🎬', 'Tell a story', 'Like FaceTime — we recap it for you')}
       ${tile('legacy', '🕯️', 'Legacy Interview', 'Tell your life story, a few questions at a time')}
       ${tile('write-letter', '💌', 'Letters for later', 'Sealed until a birthday, wedding, or hard day')}
       ${tile('ask-family', '❓', 'Ask family a question', 'Send a question you have always wondered about')}
@@ -433,6 +434,7 @@ function postHTML(post) {
     ${post.title ? `<h3>${esc(post.title)}</h3>` : ''}
     ${post.text ? `<div class="body">${esc(post.text)}</div>` : ''}
     ${mediaTag(post)}
+    ${recapHTML(post)}
     <footer>
       <button class="like ${liked ? 'on' : ''}" data-action="like" data-id="${post.id}">${liked ? '❤️' : '🤍'} ${(post.likes || []).length || ''}</button>
       <button class="like" data-action="focus-comment" data-id="${post.id}">💬 ${comments.length || ''}</button>
@@ -484,6 +486,7 @@ function refreshPost(post) {
 actions['post-menu'] = ({ id }) => {
   openSheet(`${head('Memory options')}
     <button class="btn block" data-action="edit-post" data-id="${id}">✏️ Edit text</button><br><br>
+    ${['video', 'audio'].includes(S.posts.find((x) => x.id === id)?.mediaType) ? `<button class="btn block" data-action="edit-recap" data-id="${id}">✨ ${S.posts.find((x) => x.id === id).recap ? 'Edit' : 'Add'} story recap</button><br><br>` : ''}
     <button class="btn block danger" data-action="delete-post" data-id="${id}">🗑️ Delete this memory</button>`);
 };
 
@@ -559,8 +562,14 @@ function openComposer({ type, question, rec, personId = S.meId, prefill = '', ti
     $('#rm-media', slot).onclick = () => { media = null; showMedia(); };
   };
   $$('[data-rec]', sheet).forEach((b) => b.onclick = async () => {
-    const blob = await recordMedia(b.dataset.rec);
+    const segments = [];
+    const blob = await recordMedia(b.dataset.rec, { transcribe: true, segments, prompt: question?.text });
     if (blob) { media = { blob, kind: b.dataset.rec }; showMedia(); }
+    const box = $('[name=text]', sheet);
+    if (blob && segments.length && !box.value.trim()) {
+      box.value = segments.map((x) => x.text).join(' ');
+      toast('We wrote down what you said — edit anything ✍️');
+    }
   });
   $('[name=file]', sheet).onchange = (e) => {
     const f = e.target.files[0];
@@ -601,6 +610,7 @@ function openComposer({ type, question, rec, personId = S.meId, prefill = '', ti
 
 actions.create = () => {
   openSheet(`${head('Leave a memory')}
+    <button class="tile" data-action="tell-story" style="width:100%;margin-bottom:10px;min-height:0"><span class="row"><span class="ico">🎬</span><b>Tell a story</b></span><small>Selfie video or voice, up to 10 min — we write down the highlights, the moral and the punchlines</small></button>
     <div class="grid2">
       ${tile('compose', '🎥', 'Short video', 'Up to 60 seconds')}
       ${tile('compose', '🎙️', 'Voice memory', 'Your voice is a gift')}
@@ -634,13 +644,24 @@ actions['browse-questions'] = () => {
 };
 
 // ── Recorder ─────────────────────────────────────────────────
-function recordMedia(kind) {
+// Records video or audio. With opts.transcribe, live captions are written into
+// opts.segments as [{ t: secondsFromStart, text }] using the browser's speech recognition.
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+function recordMedia(kind, opts = {}) {
+  const segments = opts.segments || [];
   return new Promise((resolve) => {
-    const maxSec = kind === 'video' ? 60 : 300;
-    let stream, recorder, chunks = [], timer, blob = null, facing = 'user';
-    const sheet = openSheet(`${head(kind === 'video' ? 'Record a video' : 'Record your voice')}
-      <div class="recorder stack">
-        ${kind === 'video' ? '<video id="live" playsinline muted autoplay></video>' : '<div class="audio-viz" id="live">🎙️</div>'}
+    const maxSec = opts.maxSec || (kind === 'video' ? 60 : 300);
+    const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    let stream, recorder, chunks = [], timer, blob = null, facing = 'user', sr = null, recording = false, t0 = 0;
+    const title = opts.title || (kind === 'video' ? 'Record a video' : 'Record your voice');
+    const sheet = openSheet(`${head(esc(title))}
+      <div class="recorder stack ${opts.full ? 'story-rec' : ''}">
+        <div class="rec-stage">
+          ${kind === 'video' ? '<video id="live" playsinline muted autoplay class="mirror"></video>' : '<div class="audio-viz" id="live">🎙️</div>'}
+          ${opts.prompt ? `<div class="rec-prompt">${esc(opts.prompt)}</div>` : ''}
+          ${opts.transcribe ? '<div class="rec-caption hidden" id="caption"></div>' : ''}
+        </div>
         <div class="center"><span id="rstatus" class="muted">Getting ready…</span></div>
         <div class="row" style="justify-content:center;gap:24px">
           ${kind === 'video' ? '<button class="iconbtn" id="flip" aria-label="Flip camera">🔄</button>' : ''}
@@ -649,11 +670,12 @@ function recordMedia(kind) {
         </div>
         <div class="row hidden" id="done-row"><button class="btn grow" id="retake">Retake</button><button class="btn primary grow" id="use">Use this</button></div>
         <label class="btn ghost block small">Or upload a file<input type="file" accept="${kind}/*" ${kind === 'video' ? 'capture="user"' : ''} hidden id="upl"></label>
-      </div>`, { onClose: () => { stop(); stream?.getTracks().forEach((t) => t.stop()); resolve(blob); } });
+      </div>`, { full: opts.full, onClose: () => { stop(); stream?.getTracks().forEach((t) => t.stop()); resolve(blob); } });
 
     const status = $('#rstatus', sheet);
     const btn = $('#recbtn', sheet);
     const live = $('#live', sheet);
+    const caption = $('#caption', sheet);
 
     async function startStream() {
       stream?.getTracks().forEach((t) => t.stop());
@@ -661,22 +683,60 @@ function recordMedia(kind) {
         stream = await navigator.mediaDevices.getUserMedia(kind === 'video'
           ? { video: { facingMode: facing, width: { ideal: 720 }, height: { ideal: 1280 } }, audio: true }
           : { audio: true });
-        if (kind === 'video') { live.srcObject = stream; live.muted = true; live.play?.(); }
-        status.textContent = `Tap the red button to start (max ${maxSec >= 60 ? `${maxSec / 60} min` : `${maxSec}s`})`;
+        if (kind === 'video') { live.srcObject = stream; live.muted = true; live.classList.toggle('mirror', facing === 'user'); live.play?.(); }
+        status.textContent = `Tap the red button to start (up to ${maxSec >= 60 ? `${Math.round(maxSec / 60)} min` : `${maxSec}s`})`;
         btn.disabled = false;
       } catch (err) {
         status.textContent = 'Camera/microphone not available. You can upload a file instead.';
       }
     }
 
+    // Live captions. Browsers stop listening after a pause, so restart while still recording.
+    function startCaptions() {
+      if (!opts.transcribe || !SpeechRec) return;
+      let pendingStart = null;
+      sr = new SpeechRec();
+      sr.continuous = true;
+      sr.interimResults = true;
+      sr.lang = navigator.language || 'en-US';
+      sr.onresult = (e) => {
+        let interim = '';
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const r = e.results[i];
+          const now = (Date.now() - t0) / 1000;
+          if (r.isFinal) {
+            const text = r[0].transcript.trim();
+            // No interim results? Estimate when they started talking from how many words were said.
+            const prevT = segments[segments.length - 1]?.t ?? 0;
+            const start = pendingStart ?? Math.max(prevT, now - text.split(/\s+/).length * 0.4);
+            if (text) segments.push({ t: Math.max(0, Math.round(start * 10) / 10), text });
+            pendingStart = null;
+          } else {
+            if (pendingStart == null) pendingStart = now;
+            interim += r[0].transcript;
+          }
+        }
+        caption.textContent = interim || segments[segments.length - 1]?.text || '';
+        caption.classList.toggle('hidden', !caption.textContent);
+      };
+      sr.onerror = (e) => {
+        if (e.error === 'not-allowed' || e.error === 'service-not-allowed' || e.error === 'audio-capture') sr = null;
+      };
+      sr.onend = () => { if (recording && sr) { try { sr.start(); } catch { /* already running */ } } };
+      try { sr.start(); } catch { sr = null; }
+    }
+
     function stop() {
       clearInterval(timer);
+      recording = false;
+      try { sr?.stop(); } catch { /* ignore */ }
       if (recorder && recorder.state !== 'inactive') recorder.stop();
     }
 
     btn.onclick = () => {
       if (recorder && recorder.state === 'recording') { stop(); return; }
       chunks = [];
+      segments.length = 0;
       const types = kind === 'video' ? ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'] : ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'];
       const mimeType = types.find((t) => window.MediaRecorder?.isTypeSupported?.(t));
       try { recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined); } catch { status.textContent = 'Recording is not supported here — try uploading.'; return; }
@@ -685,19 +745,24 @@ function recordMedia(kind) {
         blob = new Blob(chunks, { type: recorder.mimeType || mimeType || `${kind}/webm` });
         btn.classList.remove('stop');
         stream.getTracks().forEach((t) => t.stop());
+        caption?.classList.add('hidden');
         const url = URL.createObjectURL(blob);
-        if (kind === 'video') { live.srcObject = null; live.src = url; live.muted = false; live.controls = true; }
+        if (kind === 'video') { live.srcObject = null; live.src = url; live.muted = false; live.controls = true; live.classList.remove('mirror'); }
         else live.innerHTML = `<audio controls src="${url}" style="width:90%"></audio>`;
-        status.textContent = 'Watch it back, then keep it or retake.';
+        status.textContent = opts.transcribe && segments.length
+          ? `Got it — ${segments.length} lines captured. Keep it or retake.`
+          : 'Watch it back, then keep it or retake.';
         btn.parentElement.classList.add('hidden');
         $('#done-row', sheet).classList.remove('hidden');
       };
       recorder.start(1000);
+      recording = true;
       btn.classList.add('stop');
-      const t0 = Date.now();
+      t0 = Date.now();
+      startCaptions();
       timer = setInterval(() => {
         const s = Math.floor((Date.now() - t0) / 1000);
-        status.innerHTML = `<span class="rec-dot"></span>${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')} / ${Math.floor(maxSec / 60)}:${String(maxSec % 60).padStart(2, '0')}`;
+        status.innerHTML = `<span class="rec-dot"></span>${fmt(s)} / ${fmt(maxSec)}`;
         if (s >= maxSec) stop();
       }, 250);
     };
@@ -705,16 +770,255 @@ function recordMedia(kind) {
     $('#flip', sheet)?.addEventListener('click', () => { facing = facing === 'user' ? 'environment' : 'user'; startStream(); });
     $('#retake', sheet).onclick = () => {
       blob = null;
+      segments.length = 0;
       if (kind === 'video') { live.removeAttribute('src'); live.controls = false; } else live.innerHTML = '🎙️';
       btn.parentElement.classList.remove('hidden');
       $('#done-row', sheet).classList.add('hidden');
       startStream();
     };
     $('#use', sheet).onclick = () => closeSheet();
-    $('#upl', sheet).onchange = (e) => { if (e.target.files[0]) { blob = e.target.files[0]; closeSheet(); } };
+    $('#upl', sheet).onchange = (e) => { if (e.target.files[0]) { blob = e.target.files[0]; segments.length = 0; closeSheet(); } };
     startStream();
   });
 }
+
+// ── Story Time: record a story, then recap it ────────────────
+const clock = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+
+// On-device recap draft. Rough on purpose — the storyteller edits it, or the
+// optional AI helper (CONFIG.aiSummaryUrl) writes a better one.
+function localRecap(segments, prompt) {
+  const segs = segments.filter((s) => s.text && s.text.trim());
+  if (!segs.length) return { title: prompt || '', summary: '', highlights: [], moral: '', punchlines: [] };
+  const words = (s) => s.text.split(/\s+/).length;
+  const MORAL = /\b(lesson|learn(ed|t)?|moral|taught me|the point (is|was)|never forget|always remember|remember (that|this)|you (should|have to|gotta)|don'?t ever|that'?s why|if there'?s one thing)\b/i;
+  const FUNNY = /\b(ha(ha)+|laugh(ed|ing)?|funny|hilarious|joke|kidding|couldn'?t stop|cracked up|to this day|believe it or not)\b/i;
+  const VIVID = /\b(love|never|first|last|remember|best|worst|scared|proud|cried|finally|suddenly|surprise|happiest|married|born|died|won|lost)\b/i;
+  const score = (s) => words(s) / 6 + (VIVID.test(s.text) ? 3 : 0) + (/\b(19|20)\d\d\b/.test(s.text) ? 2 : 0) + (/\s[A-Z][a-z]+/.test(s.text) ? 1 : 0);
+  const highlights = [...segs].filter((s) => words(s) >= 5).sort((a, b) => score(b) - score(a)).slice(0, 4)
+    .sort((a, b) => a.t - b.t).map((s) => ({ text: s.text, t: s.t }));
+  const moral = segs.filter((s) => MORAL.test(s.text)).sort((a, b) => b.t - a.t)[0]?.text || '';
+  const funny = segs.filter((s) => FUNNY.test(s.text)).map((s) => s.text);
+  const last = segs[segs.length - 1];
+  const punchlines = funny.length ? funny.slice(0, 3) : [];
+  const summaryParts = [segs[0].text];
+  if (segs.length > 2) summaryParts.push(segs[Math.floor(segs.length / 2)].text);
+  if (segs.length > 1) summaryParts.push(last.text);
+  let summary = summaryParts.join(' … ');
+  if (summary.length > 360) summary = `${summary.slice(0, 357)}…`;
+  return { title: prompt || '', summary, highlights, moral, punchlines, draft: true };
+}
+
+async function makeRecap(segments, prompt, transcriptOverride) {
+  const segs = transcriptOverride != null && transcriptOverride.trim() !== segments.map((s) => s.text).join(' ')
+    ? transcriptOverride.split(/(?<=[.!?])\s+|\n+/).filter(Boolean).map((text, i) => ({ t: null, text, i }))
+    : segments;
+  if (CONFIG.aiSummaryUrl && segs.length) {
+    try {
+      const res = await fetch(CONFIG.aiSummaryUrl, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, segments: segs.map((s) => s.text) }),
+      });
+      if (!res.ok) throw new Error(`AI helper returned ${res.status}`);
+      const r = await res.json();
+      return {
+        title: r.title || prompt || '', summary: r.summary || '', moral: r.moral || '',
+        punchlines: r.punchlines || [],
+        highlights: (r.highlights || []).map((h) => ({ text: h.text, t: segs[h.segment]?.t ?? null })),
+        ai: true,
+      };
+    } catch (err) {
+      console.warn('AI recap failed, using on-device draft', err);
+    }
+  }
+  return localRecap(segs, prompt);
+}
+
+actions['tell-story'] = ({ pid }) => {
+  if (!guard()) return;
+  closeAllSheets();
+  const subject = person(pid) || me();
+  const sheet = openSheet(`${head('🎬 Story time')}
+    <p>Tell a story like you're on FaceTime with your family. We'll write down what you say and make a recap — the highlights, the moral, and the punchlines.</p>
+    <label class="field"><span>Whose story is it?</span><select class="input" id="st-who">${peopleOptions(subject.id)}</select></label>
+    <label class="field"><span>What's the story? Pick one or write your own</span><input class="input" id="st-prompt" placeholder="The day I…"></label>
+    <div class="chips" style="margin-bottom:16px">${STORY_PROMPTS.map((p) => `<button type="button" class="chip" data-sp>${esc(p)}</button>`).join('')}</div>
+    <div class="grid2">
+      <button class="tile" id="st-video"><span class="ico">🤳</span><b>Selfie video</b><small>Like FaceTime — they'll see your face</small></button>
+      <button class="tile" id="st-audio"><span class="ico">🎙️</span><b>Voice only</b><small>Just talk — no camera</small></button>
+    </div>
+    <p class="small muted" style="margin-top:12px">Up to 10 minutes. Tip: prop the phone up, get comfortable, and tell it the way you'd tell it at dinner.</p>`);
+  $$('[data-sp]', sheet).forEach((b) => b.onclick = () => {
+    $$('[data-sp]', sheet).forEach((x) => x.classList.toggle('on', x === b));
+    $('#st-prompt', sheet).value = b.textContent;
+  });
+  const go = async (kind) => {
+    const prompt = $('#st-prompt', sheet).value.trim();
+    const personId = $('#st-who', sheet).value;
+    const segments = [];
+    const blob = await recordMedia(kind, { transcribe: true, segments, prompt: prompt || 'Tell us a story…', maxSec: 600, full: true, title: 'Story time' });
+    if (!blob) return;
+    closeAllSheets();
+    const post = {
+      id: uid(), type: 'story', personId, authorId: S.meId, title: prompt, text: '',
+      mediaType: kind, segments: [...segments], likes: [], comments: [], createdAt: Date.now(),
+    };
+    openRecapEditor(post, blob);
+  };
+  $('#st-video', sheet).onclick = () => go('video');
+  $('#st-audio', sheet).onclick = () => go('audio');
+};
+
+// Edit (or create) the recap for a story post. `blob` is set only for a new recording.
+function openRecapEditor(post, blob = null) {
+  const isNew = !!blob;
+  const transcript = (post.segments || []).map((s) => s.text).join(' ') || post.transcript || '';
+  const src = blob ? URL.createObjectURL(blob) : null;
+  const player = post.mediaType === 'video'
+    ? `<video controls playsinline ${src ? `src="${src}"` : `data-media="${post.mediaId}"`} style="width:100%;border-radius:14px;background:#000;max-height:40vh"></video>`
+    : post.mediaType === 'audio' ? `<audio controls ${src ? `src="${src}"` : `data-media="${post.mediaId}"`} style="width:100%"></audio>` : '';
+  const sheet = openSheet(`${head(isNew ? '✨ Your story recap' : '✨ Story recap')}
+    ${player}
+    <div id="recap-status" class="card accent small" style="margin-top:12px">✨ Making the recap…</div>
+    <form class="stack" id="recap-form">
+      <label class="field"><span>Title</span><input class="input" name="title" value="${esc(post.title || '')}" placeholder="The summer of '75"></label>
+      <label class="field"><span>📝 The story in a nutshell</span><textarea class="input" name="summary" style="min-height:90px"></textarea></label>
+      <div class="field"><span>✨ Highlights <small class="muted">(tap ▶ to jump to that moment)</small></span><div id="hl-list"></div>
+        <button type="button" class="btn sm ghost" id="hl-add">＋ Add a highlight</button></div>
+      <label class="field"><span>💡 The moral of the story</span><input class="input" name="moral" placeholder="What should we learn from this?"></label>
+      <label class="field"><span>😂 Punchlines & best lines (one per line)</span><textarea class="input" name="punchlines" style="min-height:70px" placeholder="Leave empty if it wasn't a funny one"></textarea></label>
+      <details><summary class="small"><b>📜 Full transcript</b> — fix any words we heard wrong</summary>
+        <textarea class="input" name="transcript" style="min-height:140px;margin-top:8px" placeholder="Type or use your keyboard's 🎤 to dictate what was said">${esc(transcript)}</textarea>
+        <button type="button" class="btn sm" id="regen" style="margin-top:8px">✨ Remake recap from this transcript</button>
+      </details>
+      <button class="btn primary block">${isNew ? 'Save story' : 'Save recap'}</button>
+    </form>`, { full: true });
+
+  const form = $('#recap-form', sheet);
+  const statusEl = $('#recap-status', sheet);
+  const media = $('video,audio', sheet);
+  let highlights = [];
+
+  const paintHighlights = () => {
+    $('#hl-list', sheet).innerHTML = highlights.map((h, i) => `<div class="row" style="margin-bottom:6px">
+      ${h.t != null && media ? `<button type="button" class="btn sm" data-seek="${h.t}">▶ ${clock(h.t)}</button>` : ''}
+      <input class="input grow" data-hl="${i}" value="${esc(h.text)}"><button type="button" class="iconbtn" data-hl-rm="${i}" aria-label="Remove">✕</button></div>`).join('')
+      || '<p class="small muted">No highlights yet.</p>';
+    $$('[data-seek]', sheet).forEach((b) => b.onclick = () => { media.currentTime = +b.dataset.seek; media.play?.(); });
+    $$('[data-hl]', sheet).forEach((inp) => inp.oninput = () => { highlights[+inp.dataset.hl].text = inp.value; });
+    $$('[data-hl-rm]', sheet).forEach((b) => b.onclick = () => { highlights.splice(+b.dataset.hlRm, 1); paintHighlights(); });
+  };
+  $('#hl-add', sheet).onclick = () => { highlights.push({ text: '', t: media && media.currentTime ? Math.floor(media.currentTime) : null }); paintHighlights(); $$('[data-hl]', sheet).pop()?.focus(); };
+
+  const fill = (r) => {
+    if (r.title && (!form.title.value || r.ai)) form.title.value = r.title;
+    form.summary.value = r.summary || '';
+    form.moral.value = r.moral || '';
+    form.punchlines.value = (r.punchlines || []).join('\n');
+    highlights = (r.highlights || []).map((h) => ({ ...h }));
+    paintHighlights();
+  };
+
+  const generate = async () => {
+    const text = form.transcript.value.trim();
+    if (!text) {
+      statusEl.innerHTML = "We couldn't catch the words automatically on this device. Open <b>Full transcript</b> and type or dictate it with your keyboard's 🎤 — or just fill in the recap yourself.";
+      fill({ title: post.title });
+      return;
+    }
+    statusEl.textContent = '✨ Making the recap…';
+    const r = await makeRecap(post.segments || [], post.title, text);
+    fill(r);
+    statusEl.innerHTML = r.ai
+      ? '✨ Recap written by the AI helper — edit anything that doesn\'t sound right.'
+      : '✨ Here\'s a first draft of the recap. Read it through and fix it up — the storyteller knows best!';
+  };
+
+  if (post.recap) {
+    fill(post.recap);
+    statusEl.textContent = 'Edit the recap below.';
+  } else generate();
+
+  $('#regen', sheet).onclick = generate;
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const d = formData(form);
+    const newTranscript = d.transcript.trim();
+    if (newTranscript !== (post.segments || []).map((s) => s.text).join(' ')) {
+      post.transcript = newTranscript;
+      // Keep timestamps only if the words weren't changed.
+      if (post.segments?.length) post.segments = [];
+    }
+    post.title = d.title.trim();
+    post.recap = {
+      summary: d.summary.trim(), moral: d.moral.trim(),
+      punchlines: d.punchlines.split('\n').map((x) => x.trim()).filter(Boolean),
+      highlights: highlights.filter((h) => h.text.trim()),
+    };
+    if (blob) {
+      const mid = uid();
+      await db.put('media', { id: mid, blob, type: blob.type });
+      post.mediaId = mid;
+    }
+    await save('posts', post);
+    closeAllSheets();
+    await render();
+    toast(isNew ? `Story saved to ${post.personId === S.meId ? 'your' : `${nameOf(post.personId)}'s`} memory book 🎬` : 'Recap saved ✨');
+  };
+}
+
+actions['edit-recap'] = ({ id }) => { closeAllSheets(); openRecapEditor(S.posts.find((x) => x.id === id)); };
+
+function recapHTML(post) {
+  const r = post.recap;
+  const hasTranscript = (post.segments || []).length || post.transcript;
+  if (!r && !hasTranscript) return '';
+  const hl = (r?.highlights || []).map((h) => `<li>${h.t != null && post.mediaId ? `<button class="seek" data-action="seek" data-t="${h.t}">▶ ${clock(h.t)}</button> ` : ''}${esc(h.text)}</li>`).join('');
+  return `<div class="recap">
+    ${r?.summary ? `<p>${esc(r.summary)}</p>` : ''}
+    ${hl ? `<div class="recap-label">✨ Highlights</div><ul>${hl}</ul>` : ''}
+    ${r?.moral ? `<div class="recap-label">💡 Moral of the story</div><p class="moral">${esc(r.moral)}</p>` : ''}
+    ${(r?.punchlines || []).length ? `<div class="recap-label">😂 Best lines</div>${r.punchlines.map((p) => `<blockquote>“${esc(p)}”</blockquote>`).join('')}` : ''}
+    <div class="row wrap" style="margin-top:6px">
+      ${(post.segments || []).length && post.mediaId ? `<button class="btn sm" data-action="watch-story" data-id="${post.id}">${post.mediaType === 'video' ? '▶️ Watch' : '🎧 Listen'} with captions</button>` : ''}
+      ${hasTranscript ? `<details class="grow"><summary class="small muted">📜 Transcript</summary><p class="small" style="white-space:pre-wrap">${esc(post.transcript || post.segments.map((s) => s.text).join(' '))}</p></details>` : ''}
+    </div>
+  </div>`;
+}
+
+actions.seek = (d, el) => {
+  const m = el.closest('article, .book-entry')?.querySelector('video, audio');
+  if (!m) return;
+  m.currentTime = +d.t;
+  m.play?.();
+  m.scrollIntoView({ behavior: 'smooth', block: 'center' });
+};
+
+// Full-screen "sit with them" player: video or voice with live captions.
+actions['watch-story'] = ({ id }) => {
+  const post = S.posts.find((x) => x.id === id);
+  const p = person(post.personId);
+  const sheet = openSheet(`${head(esc(post.title || `${p?.name || ''}'s story`))}
+    <div class="rec-stage watch">
+      ${post.mediaType === 'video'
+        ? `<video controls playsinline autoplay data-media="${post.mediaId}"></video>`
+        : `<div class="audio-viz" style="height:240px;flex-direction:column;gap:8px">${avatar(p, 'lg')}<b>${esc(p?.name || '')}</b></div><audio controls autoplay data-media="${post.mediaId}" style="width:100%;margin-top:8px"></audio>`}
+      <div class="rec-caption" id="wcap"></div>
+    </div>
+    <p class="small muted center">Captions are from the live transcript.</p>`, { full: true });
+  const m = $('video, audio', sheet);
+  const cap = $('#wcap', sheet);
+  const segs = post.segments;
+  const paint = () => {
+    const t = m.currentTime;
+    let cur = null;
+    for (const s of segs) { if (s.t <= t + 0.3) cur = s; else break; }
+    cap.textContent = cur && t - cur.t < 12 ? cur.text : '';
+    cap.classList.toggle('hidden', !cap.textContent);
+  };
+  m.addEventListener('timeupdate', paint);
+  paint();
+};
 
 // ── Mood / feelings / help ───────────────────────────────────
 actions.mood = ({ mood }) => {
@@ -1126,6 +1430,7 @@ actions.person = ({ id }) => {
         : tile('ask-family', '❓', 'Ask a question', 'It shows up on their home screen').replace('data-action="ask-family"', `data-action="ask-family" data-to="${id}"`)}
       ${!isMe && !p.passed ? tile('open-chat-with', '💬', 'Message', 'One-on-one chat').replace('data-action="open-chat-with"', `data-action="open-chat-with" data-id="${id}"`) : ''}
       ${!p.passed ? tile('legacy', '🕯️', 'Legacy interview', 'Record their life story').replace('data-action="legacy"', `data-action="legacy" data-pid="${id}"`) : ''}
+      ${!p.passed ? tile('tell-story', '🎬', 'Story time', 'Record them telling a story').replace('data-action="tell-story"', `data-action="tell-story" data-pid="${id}"`) : ''}
       ${tile('edit-person', '⚙️', 'Edit details', 'Name, family links').replace('data-action="edit-person"', `data-action="edit-person" data-id="${id}"`)}
     </div>
     ${p.passed ? `<button class="btn block" style="margin-top:12px" data-action="remember" data-id="${id}">🕯️ Share a memory of ${esc(p.name)}</button>` : ''}`);
@@ -1190,9 +1495,11 @@ function bookSections(p) {
     const list = answers.filter((x) => !x.questionId?.startsWith('L') && (x.category || 'family') === key);
     if (list.length) sections.push([`${c.emoji} ${c.label}`, list]);
   }
-  const videos = posts.filter((x) => x.type !== 'answer' && x.mediaType === 'video');
-  const voices = posts.filter((x) => x.type !== 'answer' && x.mediaType === 'audio');
-  const stories = posts.filter((x) => x.type !== 'answer' && !['video', 'audio'].includes(x.mediaType));
+  const told = posts.filter((x) => x.type !== 'answer' && (x.recap || x.segments?.length));
+  if (told.length) sections.push(['🎬 Stories they told', told]);
+  const videos = posts.filter((x) => x.type !== 'answer' && !told.includes(x) && x.mediaType === 'video');
+  const voices = posts.filter((x) => x.type !== 'answer' && !told.includes(x) && x.mediaType === 'audio');
+  const stories = posts.filter((x) => x.type !== 'answer' && !told.includes(x) && !['video', 'audio'].includes(x.mediaType));
   if (videos.length) sections.push(['🎥 Videos', videos]);
   if (voices.length) sections.push(['🎙️ Their voice', voices]);
   if (stories.length) sections.push(['📝 Stories & photos', stories]);
@@ -1204,7 +1511,7 @@ actions['open-book'] = ({ id }) => {
   const { posts, sections, letters } = bookSections(p);
   const entry = (x) => `<div class="book-entry">
     ${x.questionText ? `<div class="q">${esc(x.questionText)}</div>` : x.title ? `<div class="q">${esc(x.title)}</div>` : ''}
-    ${x.text ? `<div class="body">${esc(x.text)}</div>` : ''}${mediaTag(x)}
+    ${x.text ? `<div class="body">${esc(x.text)}</div>` : ''}${mediaTag(x)}${recapHTML(x)}
     <div class="small muted">${new Date(x.createdAt).toLocaleDateString(undefined, { dateStyle: 'long' })}${x.authorId && x.authorId !== x.personId ? ` · added by ${esc(nameOf(x.authorId))}` : ''}</div></div>`;
   openSheet(`${head('', `<button class="btn sm" data-action="export-book" data-id="${id}">⬇️ Save</button>`)}
     <div class="book-cover">
@@ -1236,7 +1543,10 @@ actions['export-book'] = async ({ id }) => {
   for (const [title, list] of sections) {
     body += `<h2>${title}</h2>`;
     for (const x of list) {
-      body += `<div class="e">${x.questionText || x.title ? `<h3>${esc(x.questionText || x.title)}</h3>` : ''}${x.text ? `<p>${esc(x.text)}</p>` : ''}${await mediaHTML(x)}<small>${new Date(x.createdAt).toLocaleDateString(undefined, { dateStyle: 'long' })}</small></div>`;
+      const r = x.recap;
+      const recap = r ? `<div class="r">${r.summary ? `<p>${esc(r.summary)}</p>` : ''}${(r.highlights || []).length ? `<b>✨ Highlights</b><ul>${r.highlights.map((h) => `<li>${h.t != null ? `[${clock(h.t)}] ` : ''}${esc(h.text)}</li>`).join('')}</ul>` : ''}${r.moral ? `<b>💡 Moral of the story</b><p><i>${esc(r.moral)}</i></p>` : ''}${(r.punchlines || []).length ? `<b>😂 Best lines</b>${r.punchlines.map((q) => `<p>“${esc(q)}”</p>`).join('')}` : ''}</div>` : '';
+      const tx = x.transcript || (x.segments || []).map((g) => g.text).join(' ');
+      body += `<div class="e">${x.questionText || x.title ? `<h3>${esc(x.questionText || x.title)}</h3>` : ''}${x.text ? `<p>${esc(x.text)}</p>` : ''}${await mediaHTML(x)}${recap}${tx ? `<details><summary><small>Transcript</small></summary><p>${esc(tx)}</p></details>` : ''}<small>${new Date(x.createdAt).toLocaleDateString(undefined, { dateStyle: 'long' })}</small></div>`;
     }
   }
   const openLetters = letters.filter((l) => !isSealed(l));
@@ -1246,7 +1556,7 @@ actions['export-book'] = async ({ id }) => {
 <style>body{font-family:Georgia,serif;background:#fbf6f0;color:#2b2220;max-width:680px;margin:0 auto;padding:24px 16px;line-height:1.6}
 header{text-align:center;padding:40px 16px;border-radius:22px;background:linear-gradient(160deg,#fbe3da,#e1eee3);margin-bottom:24px}
 header .a{font-size:64px}h1{margin:.2em 0}h2{margin-top:36px;border-bottom:1px solid #eadfd3;padding-bottom:6px}h3{margin:0 0 4px;font-style:italic;color:#6f615b;font-weight:600}
-.e{border-left:3px solid #fbe3da;padding:4px 0 4px 14px;margin:18px 0}.e p{white-space:pre-wrap;margin:6px 0}small{color:#6f615b}
+.r{background:rgba(127,127,127,.08);border-radius:12px;padding:8px 12px;margin:8px 0}.r ul{margin:4px 0 8px}.e{border-left:3px solid #fbe3da;padding:4px 0 4px 14px;margin:18px 0}.e p{white-space:pre-wrap;margin:6px 0}small{color:#6f615b}
 video,img{width:100%;border-radius:14px;margin:8px 0;background:#000}audio{width:100%}footer{text-align:center;color:#6f615b;margin:48px 0 16px;font-size:14px}
 @media(prefers-color-scheme:dark){body{background:#181312;color:#f3e9e2}header{background:linear-gradient(160deg,#432720,#22342a)}h3,small,footer{color:#b5a59c}.e{border-color:#432720}h2{border-color:#3a2f2b}}</style></head>
 <body><header><div class="a">${esc(p.emoji || '🙂')}</div><h1>${esc(p.name)}</h1><div>${esc([years(p), p.hometown].filter(Boolean).join(' · '))}</div>${p.passed ? '<p><i>Forever in our hearts</i></p>' : ''}</header>

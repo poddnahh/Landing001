@@ -39,5 +39,10 @@ export const CONFIG = {
   // Set to '' to stop giving free links.
   familyGiftCode: 'HEARTROOTS-FAMILY',
 
+  // Optional: URL of your AI story helper (see heartroots/server/README.md).
+  // When set, story recaps (summary, highlights, moral, punchlines) are written by Claude.
+  // When empty, the app makes a simpler draft on the phone itself.
+  aiSummaryUrl: '',
+
   supportEmail: '',
 };

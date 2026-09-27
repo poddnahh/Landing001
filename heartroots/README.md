@@ -15,7 +15,8 @@ The app is a Progressive Web App (PWA). People open the link on any phone and ta
 2. Go to **Tree → ＋ Add**, add "Dad", and tick **"They'll use this device too"**.
 3. Open Dad in the tree and tap **Legacy interview**. There are 12 gentle questions. Tap **🎙️ Voice** or **🎥 Video** and let him talk. Speaking is much easier than typing when someone is tired.
 4. Use **Ask a question** on Dad's page to send him anything you have always wanted to know. It shows up first on his home screen.
-5. On **Me → Backup & share family file**, save a family file regularly. Also tap **⬇️ Save** in Dad's memory book. That gives you a single file with every answer, video and voice note, and it opens in any browser forever.
+5. Tap **🎬 Story time** on Dad's page and let him tell his favourite stories on video, like a FaceTime call. You'll get a recap with the highlights, the moral and his best lines.
+6. On **Me → Backup & share family file**, save a family file regularly. Also tap **⬇️ Save** in Dad's memory book. That gives you a single file with every answer, video and voice note, and it opens in any browser forever.
 
 Memories are stored **on the device**. Back up often, and send the family file to siblings so they have a copy too.
 
@@ -29,6 +30,7 @@ Memories are stored **on the device**. Back up often, and send the family file t
 | Legacy Interview | 12 guided life-story questions that you can record for yourself or for someone else |
 | All about me | Bio, things I love, things I can't stand |
 | Feelings | Daily mood check-in, "what's troubling you", an **"I need help"** alert shown to family, and crisis/support lines (988, the American Cancer Society helpline, Crisis Text Line) |
+| **Story Time** | Tell a story on a FaceTime-style selfie video or by voice (up to 10 min). Live captions are written as they talk. Afterwards a **recap** shows the summary, highlights (tap to jump to that moment), the moral of the story and the punchlines, and everything can be edited. Family can watch or listen with captions. The recap is drafted on the phone, or by Claude if the [AI helper](server/README.md) is deployed. Voice and video answers to questions are transcribed too. |
 | Create | 60-second videos, voice memories, stories and photo memories |
 | Feed | Likes and comments on every memory |
 | Family circle | Group chats and one-on-one chats |
@@ -97,6 +99,7 @@ heartroots/
     js/content.js         All questions, packs and games (edit freely)
     js/db.js              On-device storage, backup and import
     js/app.js             The app
+  server/                 Optional AI story-recap helper (Cloudflare Worker + Claude)
 ```
 
 To add questions, add lines to `DAILY_QUESTIONS` in `content.js`. Always add them **at the end of the list**: the IDs are based on position, so inserting in the middle would mix up which question an existing answer belongs to.

@@ -1,0 +1,8 @@
+name = "heartroots-story-helper"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# Only your site may call this helper. Change if you host the app elsewhere.
+ALLOWED_ORIGIN = "https://poddnahh.github.io"

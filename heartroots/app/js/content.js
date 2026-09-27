@@ -239,3 +239,19 @@ export const RELATIONS = [
 ];
 
 export const AVATAR_EMOJI = ['🙂', '👵', '👴', '👩', '👨', '🧒', '👧', '👦', '👶', '🧔', '👩‍🦳', '👨‍🦳', '🧑‍🦱', '🐶', '🌻', '⭐'];
+
+// Story Time: prompts for recorded stories (selfie video or voice).
+export const STORY_PROMPTS = [
+  'How I met the love of my life',
+  'The time I got in the most trouble',
+  'The best trip I ever took',
+  'How I got my first job',
+  'The funniest thing that ever happened in our family',
+  'The day you were born',
+  'A time I was really scared',
+  'The story behind my name',
+  'A story my parents used to tell me',
+  'The biggest risk I ever took',
+  'My proudest moment',
+  'A lesson I learned the hard way',
+];

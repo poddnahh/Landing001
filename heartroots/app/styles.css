@@ -320,3 +320,30 @@ button.chip.on { background: var(--accent); color: var(--accent-ink); border-col
 
 .progress { height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
 .progress > i { display: block; height: 100%; background: var(--leaf); }
+
+/* ── Story time ───────────────────────────────────── */
+.rec-stage { position: relative; }
+.rec-stage video { width: 100%; aspect-ratio: 9 / 12; object-fit: cover; background: #000; border-radius: 18px; }
+.story-rec .rec-stage video { aspect-ratio: auto; height: 58vh; }
+.rec-stage.watch video { aspect-ratio: auto; max-height: 72vh; object-fit: contain; }
+video.mirror { transform: scaleX(-1); }
+.rec-prompt {
+  position: absolute; top: 12px; left: 12px; right: 12px;
+  background: rgba(20, 12, 10, .55); color: #fff; backdrop-filter: blur(6px);
+  padding: 8px 12px; border-radius: 12px; font-family: var(--serif); font-size: 1.02rem; text-align: center;
+}
+.rec-caption {
+  position: absolute; left: 12px; right: 12px; bottom: 14px;
+  background: rgba(0, 0, 0, .68); color: #fff; padding: 8px 12px; border-radius: 12px;
+  font-size: 1.02rem; line-height: 1.35; text-align: center; font-weight: 600;
+}
+.rec-stage .audio-viz + .rec-prompt { position: static; margin-top: 8px; }
+.recap { background: var(--surface-2); border-radius: 14px; padding: 12px 14px; margin-top: 8px; font-size: .95rem; }
+.recap p { margin: 0 0 8px; }
+.recap ul { margin: 0 0 8px; padding-left: 18px; }
+.recap li { margin-bottom: 4px; }
+.recap-label { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft); margin: 8px 0 4px; }
+.recap .moral { font-family: var(--serif); font-style: italic; font-size: 1.05rem; }
+.recap blockquote { margin: 0 0 6px; padding: 6px 10px; border-left: 3px solid var(--gold); background: var(--surface); border-radius: 0 10px 10px 0; }
+.seek { border: 0; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: .75rem; border-radius: 999px; padding: 2px 8px; cursor: pointer; }
+.rec-stage.watch .rec-caption { bottom: 64px; }

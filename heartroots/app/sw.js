@@ -1,5 +1,5 @@
 // Offline support: serve the app shell from cache, refresh it in the background.
-const CACHE = 'heartroots-v1';
+const CACHE = 'heartroots-v2';
 const SHELL = ['./', './index.html', './styles.css', './js/app.js', './js/db.js', './js/content.js', './js/config.js', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
