@@ -56,7 +56,51 @@ function timeAgo(ts) {
 
 function avatar(p, size = '') {
   if (!p) return `<span class="avatar ${size}">🙂</span>`;
-  return `<span class="avatar ${size}" style="--c:${esc(p.color || COLORS[0])}">${esc(p.emoji || '🙂')}${p.passed ? '<span class="candle">🕯️</span>' : ''}</span>`;
+  const face = p.photoId ? `<img alt="" data-media="${p.photoId}">` : esc(p.emoji || '🙂');
+  return `<span class="avatar ${size} ${p.photoId ? 'photo' : ''}" style="--c:${esc(p.color || COLORS[0])}">${face}${p.passed ? '<span class="candle">🕯️</span>' : ''}</span>`;
+}
+
+// Pick a photo from the phone (or take one) and shrink it so it doesn't fill up storage.
+function pickPhoto(maxSize = 1000) {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = () => {
+      const f = input.files[0];
+      if (!f) { resolve(null); return; }
+      const img = new Image();
+      img.onload = () => {
+        const k = Math.min(1, maxSize / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(img.src);
+        c.toBlob((b) => resolve(b || f), 'image/jpeg', 0.86);
+      };
+      img.onerror = () => resolve(f);
+      img.src = URL.createObjectURL(f);
+    };
+    input.click();
+  });
+}
+
+async function storePhoto(blob) {
+  const id = uid();
+  await db.put('media', { id, blob, type: blob.type || 'image/jpeg' });
+  return id;
+}
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const bdayText = (p) => { if (!p.birthday) return ''; const [, m, d] = p.birthday.split('-').map(Number); return `${MONTHS[m - 1]} ${d}`; };
+// Days until the next birthday (0 = today), or null.
+function daysToBirthday(p) {
+  if (!p.birthday || p.passed) return null;
+  const [, m, d] = p.birthday.split('-').map(Number);
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  let next = new Date(now.getFullYear(), m - 1, d);
+  if (next < now) next = new Date(now.getFullYear() + 1, m - 1, d);
+  return Math.round((next - now) / 86400000);
 }
 
 function years(p) {
@@ -437,15 +481,26 @@ function profileForm(p = {}) {
   const color = p.color || COLORS[0];
   return `
     <label class="field"><span>Name</span><input class="input" name="name" value="${esc(p.name)}" placeholder="e.g. Dad, Grandma Rose, Kirby" required></label>
-    <div class="field"><span>Pick an avatar</span><div class="emoji-pick">${AVATAR_EMOJI.map((e) => `<button type="button" class="${e === emoji ? 'on' : ''}" data-pick="emoji" data-v="${e}">${e}</button>`).join('')}</div></div>
+    <div class="field"><span>Profile picture</span><div class="row"><span id="photo-prev">${p.photoId ? avatar(p, 'lg') : '<span class="avatar lg">📷</span>'}</span><button type="button" class="btn" data-photo-pick>📷 ${p.photoId ? 'Change photo' : 'Add a photo'}</button></div></div>
+    <div class="field"><span>…or pick a fun avatar</span><div class="emoji-pick">${AVATAR_EMOJI.map((e) => `<button type="button" class="${e === emoji ? 'on' : ''}" data-pick="emoji" data-v="${e}">${e}</button>`).join('')}</div></div>
     <div class="field"><span>Color</span><div class="color-pick">${COLORS.map((c) => `<button type="button" class="${c === color ? 'on' : ''}" style="background:${c}" data-pick="color" data-v="${c}" aria-label="color"></button>`).join('')}</div></div>
     <input type="hidden" name="emoji" value="${esc(emoji)}"><input type="hidden" name="color" value="${esc(color)}">
     <div class="row"><label class="field grow"><span>Born (year)</span><input class="input" name="birthYear" inputmode="numeric" value="${esc(p.birthYear || '')}" placeholder="1958"></label>
-    <label class="field grow"><span>Hometown</span><input class="input" name="hometown" value="${esc(p.hometown || '')}" placeholder="Where you grew up"></label></div>`;
+    <label class="field grow"><span>Birthday</span><input class="input" type="date" name="birthday" value="${esc(p.birthday || '')}"></label></div>
+    <div class="row"><label class="field grow"><span>Lives in</span><input class="input" name="livesIn" value="${esc(p.livesIn || '')}" placeholder="Lafayette, Louisiana"></label>
+    <label class="field grow"><span>From (hometown)</span><input class="input" name="hometown" value="${esc(p.hometown || '')}" placeholder="Franklin, Louisiana"></label></div>
+    <label class="field"><span>Work / what you do</span><input class="input" name="work" value="${esc(p.work || '')}" placeholder="Retired welder, teacher, grandpa…"></label>`;
 }
 
 function wirePickers(root) {
-  root.addEventListener('click', (e) => {
+  root.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-photo-pick]')) {
+      const blob = await pickPhoto(800);
+      if (!blob) return;
+      root._photo = blob;
+      $('#photo-prev', root).innerHTML = `<span class="avatar lg photo"><img alt="" src="${URL.createObjectURL(blob)}"></span>`;
+      return;
+    }
     const b = e.target.closest('[data-pick]');
     if (!b) return;
     $$(`[data-pick="${b.dataset.pick}"]`, root).forEach((x) => x.classList.toggle('on', x === b));
@@ -468,7 +523,8 @@ actions['new-profile'] = ({ first }) => {
     const d = formData(e.target);
     if (!d.name.trim()) return;
     const p = {
-      id: uid(), name: d.name.trim(), emoji: d.emoji, color: d.color, birthYear: d.birthYear, hometown: d.hometown,
+      id: uid(), name: d.name.trim(), emoji: d.emoji, color: d.color, birthYear: d.birthYear || (d.birthday || '').slice(0, 4), hometown: d.hometown,
+      livesIn: d.livesIn, work: d.work, birthday: d.birthday, photoId: sheet._photo ? await storePhoto(sheet._photo) : null,
       relation: first ? 'Me' : '', profile: true, prefs: { ...devicePrefs }, likes: [], dislikes: [], parentIds: [], askQueue: [], createdAt: Date.now(),
     };
     await save('people', p);
@@ -2006,10 +2062,12 @@ function wirePersonForm(sheet, p, isNew) {
     if (!d.name.trim()) return;
     const oldSpouse = p.spouseId;
     Object.assign(p, {
-      name: d.name.trim(), emoji: d.emoji, color: d.color, birthYear: d.birthYear, hometown: d.hometown,
+      name: d.name.trim(), emoji: d.emoji, color: d.color, birthYear: d.birthYear || (d.birthday || '').slice(0, 4), hometown: d.hometown,
+      livesIn: d.livesIn, work: d.work, birthday: d.birthday,
       relation: d.relation, parentIds: [d.parent1, d.parent2].filter(Boolean), spouseId: d.spouseId || null,
       passed: !!d.passed, deathYear: d.deathYear || '', profile: p.id === S.meId ? true : !!d.profile,
     });
+    if (sheet._photo) p.photoId = await storePhoto(sheet._photo);
     const changed = isNew ? applyAutoLinks(p, d.relation) : [];
     if (oldSpouse && oldSpouse !== p.spouseId && person(oldSpouse)?.spouseId === p.id) { person(oldSpouse).spouseId = null; changed.push(person(oldSpouse)); }
     if (p.spouseId && person(p.spouseId) && person(p.spouseId).spouseId !== p.id) { person(p.spouseId).spouseId = p.id; changed.push(person(p.spouseId)); }

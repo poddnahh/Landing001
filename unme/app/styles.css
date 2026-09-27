@@ -673,3 +673,5 @@ video.mirror { transform: scaleX(-1); }
 .toptabs .iconbtn .ic, .pagehead .iconbtn .ic, .prof-top .iconbtn .ic { width: min(1.5rem, 26px); height: min(1.5rem, 26px); }
 .iconbtn.aa { font-size: min(1.1rem, 20px); }
 :root[data-big] .bundle { flex-direction: column; align-items: flex-start; }
+.avatar.photo { overflow: hidden; background: var(--surface-2); }
+.avatar.photo img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
