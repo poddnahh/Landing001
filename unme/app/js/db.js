@@ -1,9 +1,9 @@
 // Tiny IndexedDB wrapper. Everything (including video and voice recordings)
 // is stored on the device so the app works offline and nothing is uploaded.
 
-const DB_NAME = 'heartroots';
-const DB_VERSION = 1;
-export const STORES = ['people', 'posts', 'moods', 'chats', 'messages', 'letters', 'media', 'kv'];
+const DB_NAME = 'unme';
+const DB_VERSION = 2;
+export const STORES = ['people', 'posts', 'moods', 'chats', 'messages', 'letters', 'media', 'tools', 'kv'];
 
 let dbPromise;
 
@@ -64,7 +64,7 @@ const blobToDataURL = (blob) => new Promise((resolve, reject) => {
 const dataURLToBlob = async (url) => (await fetch(url)).blob();
 
 export async function exportBundle() {
-  const out = { app: 'heartroots', version: 1, exportedAt: new Date().toISOString(), data: {} };
+  const out = { app: 'unme', version: 1, exportedAt: new Date().toISOString(), data: {} };
   for (const store of STORES) {
     if (store === 'kv') continue;
     const rows = await db.all(store);
@@ -82,7 +82,7 @@ export async function exportBundle() {
 // Merges a bundle into this device. Existing rows with the same id are updated,
 // so importing the same family bundle twice never duplicates anything.
 export async function importBundle(bundle) {
-  if (!bundle || bundle.app !== 'heartroots') throw new Error('This is not a Heartroots file.');
+  if (!bundle || (bundle.app !== 'unme' && bundle.app !== 'heartroots')) throw new Error('This is not an UnMe family file.');
   let count = 0;
   for (const [store, rows] of Object.entries(bundle.data || {})) {
     if (!STORES.includes(store) || store === 'kv') continue;

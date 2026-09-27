@@ -4,6 +4,7 @@ import {
   CATEGORIES, DAILY_QUESTIONS, LEGACY_INTERVIEW, LETTER_OCCASIONS, PACKS,
   WOULD_YOU_RATHER, STORY_STARTERS, STORY_PROMPTS, MOODS, RELATIONS, AVATAR_EMOJI,
 } from './content.js';
+import { PRODUCTS, SHOP_CATEGORIES, BUNDLE, product } from './catalog.js';
 
 // ── State ─────────────────────────────────────────────────────
 const S = {
@@ -11,7 +12,7 @@ const S = {
   meId: null, unlocked: new Set(), trialStart: null, tab: 'home',
 };
 const COLORS = ['#fbe3da', '#e1eee3', '#e3e7fb', '#fbf1d5', '#f3def5', '#d9f1f2', '#f1e0d0', '#e8e8e8'];
-const SKUS = ['base', 'parent', 'kids', 'family', 'games'];
+const SKUS = ['base', ...PRODUCTS.map((p) => p.id)];
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -97,7 +98,9 @@ async function hydrateMedia(root = document) {
       if (!row) continue;
       mediaCache.set(id, URL.createObjectURL(row.blob));
     }
-    if (el.src !== mediaCache.get(id)) el.src = mediaCache.get(id);
+    // Grid thumbnails show a frame from half a second in.
+    const url = mediaCache.get(id) + ('thumb' in el.dataset ? '#t=0.5' : '');
+    if (el.src !== url) el.src = url;
   }
 }
 
@@ -115,7 +118,9 @@ function trialDaysLeft() {
   const used = (Date.now() - S.trialStart) / 86400000;
   return Math.max(0, Math.ceil(CONFIG.trialDays - used));
 }
-const hasAccess = (sku) => S.unlocked.has(sku) || (sku === 'base' && trialDaysLeft() > 0);
+// '*' (from the family gift code) or the bundle unlock everything.
+const owns = (sku) => S.unlocked.has(sku) || S.unlocked.has('*') || (sku !== 'base' && S.unlocked.has('bundle'));
+const hasAccess = (sku) => owns(sku) || (sku === 'base' && trialDaysLeft() > 0);
 
 async function unlock(skus) {
   skus.forEach((s) => S.unlocked.add(s));
@@ -134,7 +139,7 @@ async function redeemCode(raw) {
 // Call before any "create" action. Viewing and exporting memories are never locked.
 function guard() {
   if (hasAccess('base')) return true;
-  openStore('Your free week is over. Unlock Heartroots for life to keep adding memories — everything you already saved stays yours to view and export.');
+  openStore('Your free week is over. Unlock UnMe for life to keep adding memories — everything you already saved stays yours to view and export.');
   return false;
 }
 
@@ -181,10 +186,10 @@ async function swapQuestion(p, oldId) {
 }
 
 // ── Sheets (stackable modals) ────────────────────────────────
-function openSheet(html, { full = false, onClose } = {}) {
+function openSheet(html, { full = false, onClose, cls = '' } = {}) {
   const back = document.createElement('div');
   back.className = 'sheet-backdrop';
-  back.innerHTML = `<div class="sheet ${full ? 'full' : ''}" role="dialog" aria-modal="true"><div class="grab"></div>${html}</div>`;
+  back.innerHTML = `<div class="sheet ${full ? 'full' : ''} ${cls}" role="dialog" aria-modal="true">${full ? '' : '<div class="grab"></div>'}${html}</div>`;
   back._onClose = onClose;
   back.addEventListener('click', (e) => { if (e.target === back) closeSheet(); });
   document.body.appendChild(back);
@@ -218,7 +223,7 @@ document.addEventListener('click', (e) => {
 });
 
 actions.close = () => closeSheet();
-actions.tab = ({ tab }) => { S.tab = tab; render(); window.scrollTo(0, 0); };
+actions.tab = ({ tab }) => { closeAllSheets(); S.tab = tab; render(); window.scrollTo(0, 0); };
 
 // ── Display & reading preferences ────────────────────────────
 // Saved per person (Dad can have huge text while the kids keep normal),
@@ -314,42 +319,98 @@ actions.display = () => {
   $$('[data-preset]', sheet).forEach((b) => b.onclick = async () => { await savePrefs(PRESETS[b.dataset.preset]); sync(); toast('Display updated ✓'); });
 };
 
+// ── Icons (one consistent line-icon set) ─────────────────────
+const ICONS = {
+  home: '<path d="M3.5 10.5 12 3.5l8.5 7V20a1 1 0 0 1-1 1H15v-6H9v6H4.5a1 1 0 0 1-1-1z"/>',
+  users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.3-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><circle cx="17.2" cy="8.8" r="2.8"/><path d="M16.8 14.6c2.6.2 4.4 1.9 4.9 5.4"/>',
+  inbox: '<path d="M4.5 4.5h15a1.5 1.5 0 0 1 1.5 1.5v9.5a1.5 1.5 0 0 1-1.5 1.5H11l-5 4v-4H4.5A1.5 1.5 0 0 1 3 15.5V6a1.5 1.5 0 0 1 1.5-1.5z"/><path d="M8 10.5h8"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c.8-4.2 4-6.5 8-6.5s7.2 2.3 8 6.5"/>',
+  heart: '<path d="M12 20.3s-8.3-5-8.3-11.1A4.6 4.6 0 0 1 12 6.6a4.6 4.6 0 0 1 8.3 2.6c0 6.1-8.3 11.1-8.3 11.1z"/>',
+  comment: '<path d="M12 4c5 0 9 3.2 9 7.3s-4 7.2-9 7.2c-1 0-2-.1-2.9-.4L4.5 20l1.2-3.6C4 15 3 13.3 3 11.3 3 7.2 7 4 12 4z"/>',
+  bookmark: '<path d="M6.5 3.5h11v17l-5.5-4-5.5 4z"/>',
+  share: '<path d="M13.5 5l7 7-7 7v-4.2c-5.2 0-8.4 1.6-10.5 5.2.8-5.4 3.8-10.2 10.5-11.2z"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  addUser: '<circle cx="10" cy="8" r="4"/><path d="M3 21c.8-4.2 3.5-6.5 7-6.5 1.6 0 3 .4 4.2 1.3M19 14v6M16 17h6"/>',
+  pencil: '<path d="M4 20l1.2-4.2L16 5l3 3L8.2 18.8z"/><path d="M14 7l3 3"/>',
+  bars: '<path d="M6 5v14M12 5v14M18 5v14"/>',
+  film: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 5v14M17 5v14M3 9.5h4M3 14.5h4M17 9.5h4M17 14.5h4"/>',
+  chat: '<path d="M4 5h16v11H9l-5 4z"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>',
+  bag: '<path d="M5 8h14l-1.2 12.5a1 1 0 0 1-1 .9H7.2a1 1 0 0 1-1-.9z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/>',
+  flip: '<path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3"/><path d="M18.5 3v4h-4M5.5 21v-4h4"/>',
+  timer: '<circle cx="12" cy="13" r="8"/><path d="M12 13V9M9.5 2.5h5"/>',
+  cc: '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10.5 10.2a2.2 2.2 0 1 0 0 3.6M17 10.2a2.2 2.2 0 1 0 0 3.6"/>',
+  close: '<path d="M6 6l12 12M18 6 6 18"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="m21 16.5-5-5-9.5 8.5"/>',
+  camera: '<path d="M4 8h3l2-2.5h6L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.5"/>',
+  bolt: '<path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z"/>',
+  back: '<path d="M15 5l-7 7 7 7"/>',
+  more: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
+  play: '<path d="M8 5v14l11-7z"/>',
+  sound: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>',
+  mute: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+};
+const icon = (n, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${ICONS[n] || ''}</svg>`;
+const handle = (p) => `@${(p?.name || 'someone').toLowerCase().replace(/[^a-z0-9]+/g, '')}`;
+
 // ── Rendering ────────────────────────────────────────────────
+let feedObserver = null;
+
 async function render() {
   const app = $('#app');
   applyPrefs();
-  if (!me()) { renderWelcome(app); return; }
-  const views = { home: viewHome, circle: viewCircle, tree: viewTree, me: viewMe };
+  if (!me()) { document.body.classList.remove('ui-dark'); renderWelcome(app); return; }
+  const views = { home: viewHome, family: viewFamily, inbox: viewInbox, me: (root) => viewProfile(root, S.meId) };
+  if (!views[S.tab]) S.tab = 'home';
+  if (!S.homeTab) S.homeTab = S.posts.length ? 'foryou' : 'today';
   // Build the view off-screen first so the page never flashes blank while data loads.
   const view = document.createElement('main');
   view.id = 'view';
   const tab = S.tab;
-  await views[tab](view, true);
-  if (tab !== S.tab) return; // a newer render already took over
-  app.innerHTML = `
-    <div class="topbar">
-      <div class="brand">🌳 <span class="word">${esc(CONFIG.appName)}</span></div>
-      <div class="row">
-        <button class="iconbtn" data-action="display" aria-label="Text size and display" style="font-weight:800;font-size:1.1rem">Aa</button>
-        <button class="iconbtn" data-action="share" aria-label="Share">📤</button>
-        <button class="iconbtn" data-action="switch-profile" aria-label="Switch profile">${avatar(me(), 'sm')}</button>
-      </div>
-    </div>`;
+  const homeTab = S.homeTab;
+  await views[tab](view);
+  if (tab !== S.tab || homeTab !== S.homeTab) return; // a newer render already took over
+  feedObserver?.disconnect();
+  const dark = tab === 'home' && S.homeTab === 'foryou';
+  document.body.classList.toggle('ui-dark', dark);
+  app.classList.toggle('full-bleed', dark);
+  app.innerHTML = '';
   app.appendChild(view);
-  if (tab === 'tree') requestAnimationFrame(drawTreeLines);
+  if (tab === 'family') requestAnimationFrame(drawTreeLines);
   renderTabbar();
-  hydrateMedia(app);
+  await hydrateMedia(app);
+  if (dark) feedObserver = setupFeed(view);
+}
+
+function inboxBadge() {
+  const m = me();
+  if (!m) return 0;
+  const asks = (m.askQueue || []).length;
+  const help = S.moods.filter((x) => x.needHelp && !x.resolved && x.personId !== m.id && !x.private).length;
+  const seen = S.inboxSeen || 0;
+  const fresh = activityFor(m.id).filter((a) => a.at > seen).length;
+  return asks + help + fresh;
 }
 
 function renderTabbar() {
   let bar = $('.tabbar');
   if (!bar) { bar = document.createElement('nav'); bar.className = 'tabbar'; document.body.appendChild(bar); }
-  const t = (id, ico, label) => `<button class="tab ${S.tab === id ? 'active' : ''}" data-action="tab" data-tab="${id}"><span class="ico">${ico}</span>${label}</button>`;
+  const badge = inboxBadge();
+  const t = (id, ico, label, extra = '') => `<button class="tab ${S.tab === id ? 'active' : ''}" data-action="tab" data-tab="${id}" aria-label="${label}">
+    <span class="tab-ico">${icon(ico, S.tab === id ? 'bold' : '')}${extra}</span>${label}</button>`;
   bar.innerHTML = `<div class="tabbar-inner">
-    ${t('home', '🏠', 'Home')}${t('circle', '💬', 'Circle')}
-    <button class="tab plus" data-action="create" aria-label="Create"><span class="ico">＋</span>Create</button>
-    ${t('tree', '🌳', 'Tree')}${t('me', '🙂', 'Me')}</div>`;
+    ${t('home', 'home', 'Home')}${t('family', 'users', 'Family')}
+    <button class="tab plus" data-action="create" aria-label="Create"><span class="plus-btn">${icon('plus', 'bold')}</span></button>
+    ${t('inbox', 'inbox', 'Inbox', badge ? `<span class="badge">${badge > 99 ? '99+' : badge}</span>` : '')}${t('me', 'user', 'Profile')}</div>`;
 }
+
+// Shared page header: [left] Title [right]
+const pageHead = (left, title, right) =>
+  `<header class="pagehead"><div class="ph-side">${left || ''}</div><h1 class="ph-title">${title}</h1><div class="ph-side right">${right || ''}</div></header>`;
+const hbtn = (action, ico, label, data = '') => `<button class="iconbtn" data-action="${action}" ${data} aria-label="${label}">${icon(ico)}</button>`;
+const aaBtn = () => '<button class="iconbtn aa" data-action="display" aria-label="Text size and display">Aa</button>';
 
 // ── Welcome / onboarding ─────────────────────────────────────
 function renderWelcome(app) {
@@ -420,6 +481,7 @@ actions['new-profile'] = ({ first }) => {
     await render();
     window.scrollTo(0, 0);
     toast(`Welcome, ${p.name} 💛`);
+    setTimeout(maybeDailyQuestion, 900);
   };
 };
 
@@ -433,13 +495,29 @@ actions['switch-profile'] = () => {
 
 actions['use-profile'] = async ({ id }) => {
   S.meId = id; await db.setKV('meId', id);
-  closeAllSheets(); S.tab = 'home'; await render();
+  S.inboxSeen = await db.getKV(`inboxSeen:${id}`, 0);
+  closeAllSheets(); S.tab = 'home'; S.homeTab = null; await render();
+  setTimeout(maybeDailyQuestion, 400);
   window.scrollTo(0, 0);
   toast(`Hi ${nameOf(id)} 👋`);
 };
 
-// ── Home ─────────────────────────────────────────────────────
+// ── Home: Shop · Today · For You ─────────────────────────────
+function homeTabs() {
+  const b = (t, label) => `<button class="${S.homeTab === t ? 'on' : ''}" data-action="home-tab" data-t="${t}">${label}</button>`;
+  return `<nav class="toptabs ${S.homeTab === 'foryou' ? 'on-dark' : ''}">
+    ${aaBtn()}<div class="tt-list">${b('shop', 'Shop')}${b('today', 'Today')}${b('foryou', 'For You')}</div>${hbtn('search', 'search', 'Search')}</nav>`;
+}
+actions['home-tab'] = ({ t }) => { S.homeTab = t; render(); window.scrollTo(0, 0); };
+
 async function viewHome(root) {
+  if (!S.homeTab) S.homeTab = S.posts.length ? 'foryou' : 'today';
+  if (S.homeTab === 'foryou') return viewForYou(root);
+  if (S.homeTab === 'shop') return viewShop(root);
+  return viewToday(root);
+}
+
+async function viewToday(root) {
   const m = me();
   const qs = await todaysQuestions(m);
   const done = answeredIds(m.id);
@@ -449,11 +527,11 @@ async function viewHome(root) {
   const myHelp = S.moods.find((x) => x.needHelp && !x.resolved && x.personId === m.id);
   const hour = new Date().getHours();
   const hello = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-  const trial = !S.unlocked.has('base') ? trialDaysLeft() : null;
+  const trial = !owns('base') ? trialDaysLeft() : null;
   const letters = S.letters.filter((l) => l.toId === m.id);
 
-  root.innerHTML = `
-    <h1>${hello}, ${esc(m.name)}</h1>
+  root.innerHTML = `${homeTabs()}
+    <h1 style="margin-top:6px">${hello}, ${esc(m.name)}</h1>
     <p class="muted">What will your family learn about you today?</p>
 
     ${helpAlerts.map((a) => `<div class="card alert">
@@ -464,18 +542,7 @@ async function viewHome(root) {
 
     ${trial !== null && trial <= 3 ? `<div class="card accent row"><div class="grow"><b>${trial > 0 ? `${trial} day${trial === 1 ? '' : 's'} left in your free week` : 'Your free week has ended'}</b><br><span class="small">Unlock for life — just $${CONFIG.basePrice}, one time.</span></div><button class="btn primary sm" data-action="store">Unlock</button></div>` : ''}
 
-    ${qs.map((q) => {
-      const isDone = done.has(q.id);
-      const cat = CATEGORIES[q.category] || CATEGORIES.family;
-      return `<div class="card qcard ${isDone ? 'done' : ''}">
-        <div class="row spread"><span class="chip accent">${cat.emoji} ${q.fromId ? `${esc(nameOf(q.fromId))} asked you` : 'Question of the day'}</span>${isDone ? '<span class="chip leaf">✓ Answered</span>' : ''}</div>
-        <div class="row" style="align-items:flex-start"><div class="qtext grow">${esc(q.text)}</div>${speakBtn(q.text)}</div>
-        ${isDone ? '' : `<div class="row"><button class="btn primary grow" data-action="answer" data-qid="${q.id}">Answer</button>
-          <button class="btn" data-action="answer" data-qid="${q.id}" data-rec="video" aria-label="Answer with video">🎥</button>
-          <button class="btn" data-action="answer" data-qid="${q.id}" data-rec="audio" aria-label="Answer with voice">🎙️</button>
-          ${q.fromId ? '' : `<button class="btn ghost sm" data-action="skip-q" data-qid="${q.id}">Skip</button>`}</div>`}
-      </div>`;
-    }).join('')}
+    ${qs.map((q) => questionCard(q, done.has(q.id))).join('')}
     ${qs.every((q) => done.has(q.id)) ? '<button class="btn block" data-action="more-question" style="margin-bottom:14px">I\'m on a roll — one more question</button>' : ''}
 
     <div class="card">
@@ -491,12 +558,22 @@ async function viewHome(root) {
       ${tile('write-letter', '💌', 'Letters for later', 'Sealed until a birthday, wedding, or hard day')}
       ${tile('ask-family', '❓', 'Ask family a question', 'Send a question you have always wondered about')}
       ${tile('games', '🎲', 'Family games', 'How well do you know each other?')}
-      ${tile('packs', '🧰', 'Help packs', 'Parent, kids & family support')}
+      ${tile('home-tab', '🛍️', 'Marketplace', 'Budget, parenting, teens, faith & more').replace('data-action="home-tab"', 'data-action="home-tab" data-t="shop"')}
       ${tile('books', '📖', 'Memory books', 'Everything someone shared, in one place')}
-    </div>
+      ${tile('home-tab', '▶️', 'Watch family videos', 'Swipe through everyone\'s memories').replace('data-action="home-tab"', 'data-action="home-tab" data-t="foryou"')}
+    </div>`;
+}
 
-    <div class="section-title"><h2>Family feed</h2><span class="small muted">${S.posts.length} memories</span></div>
-    ${feedHTML(S.posts.slice(0, 40))}`;
+function questionCard(q, isDone) {
+  const cat = CATEGORIES[q.category] || CATEGORIES.family;
+  return `<div class="card qcard ${isDone ? 'done' : ''}">
+    <div class="row spread"><span class="chip accent">${cat.emoji} ${q.fromId ? `${esc(nameOf(q.fromId))} asked you` : 'Question of the day'}</span>${isDone ? '<span class="chip leaf">✓ Answered</span>' : ''}</div>
+    <div class="row" style="align-items:flex-start"><div class="qtext grow">${esc(q.text)}</div>${speakBtn(q.text)}</div>
+    ${isDone ? '' : `<div class="row"><button class="btn primary grow" data-action="answer" data-qid="${q.id}">Answer</button>
+      <button class="btn" data-action="answer" data-qid="${q.id}" data-rec="video" aria-label="Answer with video">🎥</button>
+      <button class="btn" data-action="answer" data-qid="${q.id}" data-rec="audio" aria-label="Answer with voice">🎙️</button>
+      ${q.fromId ? '' : `<button class="btn ghost sm" data-action="skip-q" data-qid="${q.id}">Skip</button>`}</div>`}
+  </div>`;
 }
 
 const tile = (action, ico, title, sub, locked = false) =>
@@ -513,38 +590,133 @@ actions['more-question'] = async () => {
   render();
 };
 
-// ── Feed ─────────────────────────────────────────────────────
-const TYPE_LABEL = { answer: '💬 Answered', story: '📝 Story', video: '🎥 Video', voice: '🎙️ Voice memory', photo: '📷 Photo memory' };
-
-function feedHTML(posts) {
-  if (!posts.length) return `<div class="empty"><span class="ico">🌱</span>Nothing here yet. Answer a question or share a memory to plant the first seed.</div>`;
-  return posts.map(postHTML).join('');
+// Every time the app opens: a question card pops up (once a day per person) until answered.
+let dailyBusy = false;
+async function maybeDailyQuestion() {
+  const m = me();
+  if (!m || !hasAccess('base') || $('.sheet-backdrop') || dailyBusy) return;
+  dailyBusy = true;
+  try { await showDailyQuestion(m); } finally { dailyBusy = false; }
+}
+async function showDailyQuestion(m) {
+  const key = `qpop:${m.id}`;
+  if ((await db.getKV(key, '')) === today()) return;
+  const done = answeredIds(m.id);
+  const q = (await todaysQuestions(m)).find((x) => !done.has(x.id));
+  if (!q) return;
+  await db.setKV(key, today());
+  const cat = CATEGORIES[q.category] || CATEGORIES.family;
+  openSheet(`${head('')}
+    <div class="daily-pop">
+      <span class="chip accent">${cat.emoji} ${q.fromId ? `${esc(nameOf(q.fromId))} asked you` : 'Your question for today'}</span>
+      <div class="row" style="align-items:flex-start;margin:14px 0 18px"><div class="qtext grow" style="font-size:1.6rem">${esc(q.text)}</div>${speakBtn(q.text)}</div>
+      <button class="btn primary block" data-action="answer" data-qid="${q.id}">✍️ Write my answer</button>
+      <div class="row" style="margin-top:10px"><button class="btn grow" data-action="answer" data-qid="${q.id}" data-rec="video">🎥 Video</button><button class="btn grow" data-action="answer" data-qid="${q.id}" data-rec="audio">🎙️ Voice</button></div>
+      <button class="btn ghost block" data-action="close" style="margin-top:6px">Maybe later</button>
+    </div>`);
 }
 
-function postHTML(post) {
+// ── For You: full-screen vertical video feed ─────────────────
+function feedOrder() {
+  const seen = (p) => (p.seenBy || []).includes(S.meId);
+  return [...S.posts].sort((a, b) => (seen(a) - seen(b)) || (b.createdAt - a.createdAt));
+}
+
+function viewForYou(root) {
+  const posts = feedOrder();
+  root.innerHTML = `${homeTabs()}
+    <div class="feed" id="feed">${posts.length ? posts.map(slideHTML).join('') : `
+      <section class="slide"><div class="slide-text" style="--tone:linear-gradient(160deg,#a8432d,#3b6446)"><div class="st-body">🌱<br>No memories yet.<br><small>Tap ＋ to record the first one.</small></div></div></section>`}</div>`;
+}
+
+const BG = ['linear-gradient(160deg,#a8432d,#6b2a1c)', 'linear-gradient(160deg,#3b6446,#1f3a28)', 'linear-gradient(160deg,#3d4db3,#1e2766)', 'linear-gradient(160deg,#8a5a1f,#4d3210)', 'linear-gradient(160deg,#7a4bb3,#3f2366)', 'linear-gradient(160deg,#1f7a6d,#0f413a)'];
+const bgFor = (post) => post.bg || BG[[...(post.personId || 'x')].reduce((a, c) => a + c.charCodeAt(0), 0) % BG.length];
+
+function slideHTML(post) {
   const p = person(post.personId);
+  let media;
+  if (post.mediaType === 'video') media = `<video class="slide-video" playsinline loop muted preload="metadata" data-media="${post.mediaId}"></video><div class="tap-hint hidden">${icon('play')}</div>`;
+  else if (post.mediaType === 'image') media = `<img class="slide-img" alt="" data-media="${post.mediaId}">`;
+  else if (post.mediaType === 'audio') media = `<div class="slide-audio" style="--tone:${bgFor(post)}">${avatar(p, 'xl')}<div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="small">🎙️ Voice memory · tap to play</div><audio preload="metadata" data-media="${post.mediaId}"></audio></div>`;
+  else media = `<div class="slide-text" style="--tone:${bgFor(post)}">${post.questionText ? `<div class="st-q">${esc(post.questionText)}</div>` : ''}<div class="st-body">${esc(post.title && !post.text ? post.title : post.text || post.title || '')}</div></div>`;
+  const isText = !post.mediaType;
   const addedBy = post.authorId && post.authorId !== post.personId ? ` · added by ${esc(nameOf(post.authorId))}` : '';
-  const liked = (post.likes || []).includes(S.meId);
-  const comments = post.comments || [];
-  return `<article class="card post" id="post-${post.id}">
-    <header>${avatar(p)}<div class="grow"><div class="who">${esc(p?.name || 'Someone')}</div><div class="small muted">${TYPE_LABEL[post.type] || ''} · ${timeAgo(post.createdAt)}${addedBy}</div></div>
-      ${post.personId === S.meId || post.authorId === S.meId ? `<button class="iconbtn" data-action="post-menu" data-id="${post.id}" aria-label="More">⋯</button>` : ''}</header>
-    ${post.questionText ? `<div class="q">“${esc(post.questionText)}”</div>` : ''}
-    ${post.title ? `<h3>${esc(post.title)}</h3>` : ''}
-    ${post.text ? `<div class="body">${esc(post.text)}</div>` : ''}
-    ${mediaTag(post)}
-    ${recapHTML(post)}
-    <footer>
-      <button class="like ${liked ? 'on' : ''}" data-action="like" data-id="${post.id}">${liked ? '❤️' : '🤍'} ${(post.likes || []).length || ''}</button>
-      <button class="like" data-action="focus-comment" data-id="${post.id}">💬 ${comments.length || ''}</button>
-      <span class="grow"></span>
-      <button class="like" data-action="open-book" data-id="${post.personId}">📖</button>
-    </footer>
-    <div class="comments">
-      ${comments.map((c) => `<div class="comment"><b>${esc(nameOf(c.personId))}</b>${esc(c.text)}</div>`).join('')}
-      <form class="row" data-comment="${post.id}"><input class="input" name="c" placeholder="Say something kind…" style="padding:8px 12px"><button class="btn sm">Send</button></form>
+  return `<section class="slide" data-post="${post.id}">
+    ${media}
+    <div class="slide-cap">
+      <button class="cap-name" data-action="person" data-id="${post.personId}">${esc(p?.name || 'Someone')}</button><span class="cap-meta"> · ${timeAgo(post.createdAt)}${addedBy}</span>
+      ${!isText && (post.questionText || post.title) ? `<div class="cap-q">${esc(post.questionText || post.title)}</div>` : ''}
+      ${!isText && post.text ? `<div class="cap-text">${esc(post.text)}</div>` : ''}
+      ${post.recap || post.segments?.length ? `<button class="cap-chip" data-action="recap-sheet" data-id="${post.id}">✨ Story recap</button>` : ''}
     </div>
-  </article>`;
+    <div class="rail" data-rail="${post.id}">${railHTML(post)}</div>
+  </section>`;
+}
+
+const fmtCount = (n) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}K` : String(n || 0));
+
+function railHTML(post) {
+  const p = person(post.personId);
+  const liked = (post.likes || []).includes(S.meId);
+  const saved = (post.saves || []).includes(S.meId);
+  const mine = post.personId === S.meId || post.authorId === S.meId;
+  return `<button class="rail-av" data-action="person" data-id="${post.personId}" aria-label="${esc(p?.name || '')}">${avatar(p)}</button>
+    <button class="rail-btn ${liked ? 'liked' : ''}" data-action="like" data-id="${post.id}" aria-label="Like">${icon('heart', liked ? 'fill' : '')}<span>${fmtCount((post.likes || []).length)}</span></button>
+    <button class="rail-btn" data-action="comments" data-id="${post.id}" aria-label="Comments">${icon('comment', 'fill')}<span>${fmtCount((post.comments || []).length)}</span></button>
+    <button class="rail-btn ${saved ? 'saved' : ''}" data-action="bookmark" data-id="${post.id}" aria-label="Save">${icon('bookmark', 'fill')}<span>${fmtCount((post.saves || []).length)}</span></button>
+    <button class="rail-btn" data-action="share-post" data-id="${post.id}" aria-label="Share">${icon('share', 'fill')}<span>Share</span></button>
+    ${mine ? `<button class="rail-btn" data-action="post-menu" data-id="${post.id}" aria-label="More">${icon('more')}</button>` : ''}`;
+}
+
+function refreshRail(post) {
+  $$(`[data-rail="${post.id}"]`).forEach((el) => { el.innerHTML = railHTML(post); hydrateMedia(el); });
+}
+
+// Autoplay the slide in view, pause the rest, count views.
+function setupFeed(root) {
+  const feed = $('.feed', root);
+  if (!feed) return null;
+  const obs = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      const slide = e.target;
+      const m = $('video, audio', slide);
+      if (e.isIntersecting && e.intersectionRatio > 0.6) {
+        if (m) { m.muted = m.tagName === 'VIDEO' ? !S.sound : false; if (m.tagName === 'VIDEO' || S.sound) m.play?.().catch(() => {}); }
+        countView(slide.dataset.post);
+      } else if (m) m.pause?.();
+    }
+  }, { root: feed, threshold: [0, 0.6, 1] });
+  $$('.slide', feed).forEach((s) => obs.observe(s));
+  feed.onclick = (e) => {
+    if (e.target.closest('button, a, .rail')) return;
+    const slide = e.target.closest('.slide');
+    const m = slide && $('video, audio', slide);
+    if (!m) return;
+    if (!S.sound) { S.sound = true; m.muted = false; m.play?.(); toast('🔊 Sound on'); return; }
+    if (m.paused) m.play?.(); else m.pause?.();
+    $('.tap-hint', slide)?.classList.toggle('hidden', !m.paused);
+  };
+  return obs;
+}
+
+const viewed = new Set();
+async function countView(id) {
+  if (!id || viewed.has(id)) return;
+  viewed.add(id);
+  const post = S.posts.find((x) => x.id === id);
+  if (!post) return;
+  post.views = (post.views || 0) + 1;
+  post.seenBy = [...new Set([...(post.seenBy || []), S.meId])];
+  await save('posts', post);
+}
+
+// A feed you can open from anywhere (profile grid, search) starting at one post.
+function openFeedViewer(posts, startId) {
+  const sheet = openSheet(`<div class="feed-top">${hbtn('close', 'back', 'Back')}</div><div class="feed" id="vfeed">${posts.map(slideHTML).join('')}</div>`,
+    { full: true, cls: 'feed-sheet', onClose: () => { obs?.disconnect(); S.tab === 'me' && render(); } });
+  const start = $(`[data-post="${startId}"]`, sheet);
+  if (start) $('#vfeed', sheet).scrollTop = start.offsetTop;
+  const obs = setupFeed(sheet);
 }
 
 actions.like = async ({ id }) => {
@@ -553,40 +725,72 @@ actions.like = async ({ id }) => {
   likes.has(S.meId) ? likes.delete(S.meId) : likes.add(S.meId);
   post.likes = [...likes];
   await save('posts', post);
-  refreshPost(post);
+  refreshRail(post);
 };
 
-actions['focus-comment'] = ({ id }) => $(`[data-comment="${id}"] input`)?.focus();
-
-document.addEventListener('submit', async (e) => {
-  const form = e.target.closest('[data-comment]');
-  if (!form) return;
-  e.preventDefault();
-  const text = form.c.value.trim();
-  if (!text) return;
-  const post = S.posts.find((x) => x.id === form.dataset.comment);
-  post.comments = [...(post.comments || []), { id: uid(), personId: S.meId, text, at: Date.now() }];
+actions.bookmark = async ({ id }) => {
+  const post = S.posts.find((x) => x.id === id);
+  const saves = new Set(post.saves || []);
+  const on = !saves.has(S.meId);
+  on ? saves.add(S.meId) : saves.delete(S.meId);
+  post.saves = [...saves];
   await save('posts', post);
-  refreshPost(post);
-});
+  refreshRail(post);
+  toast(on ? 'Saved to your favorites 🔖' : 'Removed from favorites');
+};
 
-function refreshPost(post) {
-  for (const el of $$(`#post-${post.id}`)) {
-    const tmp = document.createElement('div');
-    tmp.innerHTML = postHTML(post);
-    // Keep the existing media element so playback is not interrupted.
-    const oldMedia = $('video,audio,img', el);
-    const newMedia = $('video,audio,img', tmp.firstElementChild);
-    if (oldMedia && newMedia) newMedia.replaceWith(oldMedia);
-    el.replaceWith(tmp.firstElementChild);
-  }
-}
+actions['share-post'] = async ({ id }) => {
+  const post = S.posts.find((x) => x.id === id);
+  const who = nameOf(post.personId);
+  const words = post.recap?.summary || post.text || post.title || post.questionText || '';
+  await shareLink(`${who} on ${CONFIG.appName}`, `${who} shared a memory on ${CONFIG.appName}: “${words.slice(0, 140)}”`, appURL({ gift: CONFIG.familyGiftCode, ref: me()?.name }));
+};
+
+actions.comments = ({ id }) => {
+  const post = S.posts.find((x) => x.id === id);
+  const sheet = openSheet(`${head(`${(post.comments || []).length} comments`)}<div id="clist"></div>
+    <form class="composer-bar" id="cform">${avatar(me(), 'sm')}<input class="input" name="c" placeholder="Add a kind comment…" autocomplete="off"><button class="btn primary sm">Send</button></form>`);
+  const paint = () => {
+    $('.sheet-head h2', sheet).textContent = `${(post.comments || []).length} comments`;
+    $('#clist', sheet).innerHTML = (post.comments || []).map((c) => `<div class="cmt">${avatar(person(c.personId), 'sm')}<div><div class="small muted"><b>${esc(nameOf(c.personId))}</b> · ${timeAgo(c.at)}</div>${esc(c.text)}</div></div>`).join('')
+      || '<div class="empty">Be the first to say something kind 💛</div>';
+  };
+  paint();
+  $('#cform', sheet).onsubmit = async (e) => {
+    e.preventDefault();
+    const text = e.target.c.value.trim();
+    if (!text) return;
+    post.comments = [...(post.comments || []), { id: uid(), personId: S.meId, text, at: Date.now() }];
+    await save('posts', post);
+    e.target.c.value = '';
+    paint();
+    refreshRail(post);
+  };
+};
+
+actions['recap-sheet'] = ({ id }) => {
+  const post = S.posts.find((x) => x.id === id);
+  openSheet(`${head(`✨ ${esc(post.title || 'Story recap')}`)}<article>${mediaTag(post)}${recapHTML(post)}</article>`);
+};
 
 actions['post-menu'] = ({ id }) => {
-  openSheet(`${head('Memory options')}
-    <button class="btn block" data-action="edit-post" data-id="${id}">✏️ Edit text</button><br><br>
-    ${['video', 'audio'].includes(S.posts.find((x) => x.id === id)?.mediaType) ? `<button class="btn block" data-action="edit-recap" data-id="${id}">✨ ${S.posts.find((x) => x.id === id).recap ? 'Edit' : 'Add'} story recap</button><br><br>` : ''}
-    <button class="btn block danger" data-action="delete-post" data-id="${id}">🗑️ Delete this memory</button>`);
+  const post = S.posts.find((x) => x.id === id);
+  openSheet(`${head('Options')}
+    <div class="stack">
+      <button class="btn block" data-action="pin-post" data-id="${id}">📌 ${post.pinned ? 'Unpin from' : 'Pin to'} profile</button>
+      <button class="btn block" data-action="edit-post" data-id="${id}">✏️ Edit text</button>
+      ${['video', 'audio'].includes(post.mediaType) ? `<button class="btn block" data-action="edit-recap" data-id="${id}">✨ ${post.recap ? 'Edit' : 'Add'} story recap</button>` : ''}
+      <button class="btn block danger" data-action="delete-post" data-id="${id}">🗑️ Delete this memory</button>
+    </div>`);
+};
+
+actions['pin-post'] = async ({ id }) => {
+  const post = S.posts.find((x) => x.id === id);
+  post.pinned = !post.pinned;
+  await save('posts', post);
+  closeSheet();
+  toast(post.pinned ? 'Pinned to profile 📌' : 'Unpinned');
+  if (S.tab === 'me') render();
 };
 
 actions['edit-post'] = ({ id }) => {
@@ -599,7 +803,7 @@ actions['edit-post'] = ({ id }) => {
     e.preventDefault();
     const d = formData(e.target);
     post.text = d.text; if ('title' in d) post.title = d.title;
-    await save('posts', post); closeSheet(); render();
+    await save('posts', post); closeAllSheets(); render();
   };
 };
 
@@ -610,6 +814,33 @@ actions['delete-post'] = async ({ id }) => {
   await remove('posts', id);
   closeAllSheets(); render(); toast('Deleted');
 };
+
+// ── Search ───────────────────────────────────────────────────
+actions.search = () => {
+  const sheet = openSheet(`${head('Search')}
+    <div class="searchbar">${icon('search')}<input class="input" id="q" placeholder="Search memories, family, shop…" autocomplete="off"></div>
+    <div id="results" style="margin-top:12px"></div>`, { full: true });
+  const input = $('#q', sheet);
+  const paint = () => {
+    const q = input.value.trim().toLowerCase();
+    if (!q) { $('#results', sheet).innerHTML = '<p class="muted small">Try "Colorado", "recipe", "budget" or a name.</p>'; return; }
+    const has = (...xs) => xs.some((x) => (x || '').toLowerCase().includes(q));
+    const people = S.people.filter((p) => has(p.name, p.hometown, p.relation));
+    const posts = S.posts.filter((p) => has(p.text, p.title, p.questionText, p.transcript, p.recap?.summary, p.recap?.moral));
+    const prods = PRODUCTS.filter((p) => has(p.name, p.tagline, p.subtitle));
+    $('#results', sheet).innerHTML = `
+      ${people.length ? `<h3>Family</h3>${people.map((p) => `<button class="listrow" data-action="person" data-id="${p.id}">${avatar(p)}<div class="grow"><b>${esc(p.name)}</b><div class="small muted">${esc(handle(p))}</div></div></button>`).join('')}` : ''}
+      ${posts.length ? `<h3>Memories</h3>${posts.slice(0, 30).map((p) => `<button class="listrow" data-action="open-search-post" data-id="${p.id}">${avatar(person(p.personId))}<div class="grow"><b>${esc(p.questionText || p.title || TYPE_LABEL[p.type] || 'Memory')}</b><div class="small muted clamp2">${esc(p.text || p.recap?.summary || '')}</div></div></button>`).join('')}` : ''}
+      ${prods.length ? `<h3>Shop</h3>${prods.map((p) => `<button class="listrow" data-action="product" data-id="${p.id}"><span class="avatar" style="--c:${p.color}22">${p.emoji}</span><div class="grow"><b>${esc(p.name)}</b><div class="small muted">${esc(p.tagline)}</div></div></button>`).join('')}` : ''}
+      ${!people.length && !posts.length && !prods.length ? '<div class="empty">Nothing found.</div>' : ''}`;
+  };
+  input.oninput = paint;
+  paint();
+  setTimeout(() => input.focus(), 50);
+};
+actions['open-search-post'] = ({ id }) => openFeedViewer(S.posts, id);
+
+const TYPE_LABEL = { answer: '💬 Answered', story: '📝 Story', video: '🎥 Video', voice: '🎙️ Voice memory', photo: '📷 Photo memory' };
 
 // ── Composer: answers & memories ─────────────────────────────
 function peopleOptions(selectedId, filter = () => true) {
@@ -627,13 +858,14 @@ actions.answer = ({ qid, rec, pid }) => {
 function findPackQuestion(qid) {
   const m = /^p:(\w+):(\d+)$/.exec(qid || '');
   if (!m) return null;
-  return { id: qid, text: PACKS[m[1]].questions[+m[2]], category: 'family' };
+  const text = product(m[1])?.questions?.[+m[2]];
+  return text ? { id: qid, text, category: 'family' } : null;
 }
 
 // type: answer | story | video | voice | photo
-function openComposer({ type, question, rec, personId = S.meId, prefill = '', title = '' }) {
-  const titles = { answer: 'Your answer', story: 'Write a story', video: 'Short video', voice: 'Voice memory', photo: 'Photo memory' };
-  let media = null; // { blob, kind }
+function openComposer({ type, question, rec, personId = S.meId, prefill = '', title = '', media: initialMedia = null }) {
+  const titles = { answer: 'Your answer', story: 'Write a story', video: 'New post', voice: 'New voice memory', photo: 'New photo memory' };
+  let media = initialMedia; // { blob, kind }
   const sheet = openSheet(`${head(titles[type])}
     <form class="stack" id="composer">
       ${question ? `<div class="card accent row" style="align-items:flex-start"><div class="qtext grow" style="font-family:var(--serif);font-size:1.15rem">${esc(question.text)}</div>${speakBtn(question.text)}</div>` : ''}
@@ -662,8 +894,9 @@ function openComposer({ type, question, rec, personId = S.meId, prefill = '', ti
   };
   $$('[data-rec]', sheet).forEach((b) => b.onclick = async () => {
     const segments = [];
-    const blob = await recordMedia(b.dataset.rec, { transcribe: true, segments, prompt: question?.text });
-    if (blob) { media = { blob, kind: b.dataset.rec }; showMedia(); }
+    const ropts = { transcribe: true, segments, prompt: question?.text };
+    const blob = await recordMedia(b.dataset.rec, ropts);
+    if (blob) { media = { blob, kind: ropts.kindOut || b.dataset.rec }; showMedia(); }
     const box = $('[name=text]', sheet);
     if (blob && segments.length && !box.value.trim()) {
       box.value = segments.map((x) => x.text).join(' ');
@@ -686,7 +919,7 @@ function openComposer({ type, question, rec, personId = S.meId, prefill = '', ti
       id: uid(), type, personId: d.personId, authorId: S.meId, text: d.text?.trim() || '', title: d.title?.trim() || '',
       likes: [], comments: [], createdAt: Date.now(),
     };
-    if (question) { post.questionId = question.id; post.questionText = question.text; post.category = question.category; }
+    if (question) { post.questionId = question.id; post.questionText = question.text; post.category = question.category; if (question.fromId) post.askedBy = question.fromId; }
     if (media) {
       const mid = uid();
       await db.put('media', { id: mid, blob: media.blob, type: media.blob.type });
@@ -707,20 +940,6 @@ function openComposer({ type, question, rec, personId = S.meId, prefill = '', ti
   };
 }
 
-actions.create = () => {
-  openSheet(`${head('Leave a memory')}
-    <button class="tile" data-action="tell-story" style="width:100%;margin-bottom:10px;min-height:0"><span class="row"><span class="ico">🎬</span><b>Tell a story</b></span><small>Selfie video or voice, up to 10 min — we write down the highlights, the moral and the punchlines</small></button>
-    <div class="grid2">
-      ${tile('compose', '🎥', 'Short video', 'Up to 60 seconds')}
-      ${tile('compose', '🎙️', 'Voice memory', 'Your voice is a gift')}
-      ${tile('compose', '📝', 'Write a story', 'A moment worth keeping')}
-      ${tile('compose', '📷', 'Photo memory', 'The story behind a picture')}
-      ${tile('browse-questions', '💬', 'Pick a question', 'Browse every question')}
-      ${tile('write-letter', '💌', 'Letter for later', 'Sealed for a future day')}
-    </div>`);
-  const kinds = ['video', 'voice', 'story', 'photo'];
-  $$('.sheet [data-action="compose"]').forEach((b, i) => { b.dataset.kind = kinds[i]; });
-};
 
 actions.compose = ({ kind }) => {
   if (!guard()) return;
@@ -742,57 +961,85 @@ actions['browse-questions'] = () => {
   openSheet(`${head('All questions')}<p class="muted small">${done.size} of ${DAILY_QUESTIONS.length} answered</p>${groups}`);
 };
 
-// ── Recorder ─────────────────────────────────────────────────
-// Records video or audio. With opts.transcribe, live captions are written into
-// opts.segments as [{ t: secondsFromStart, text }] using the browser's speech recognition.
+// ── Camera (TikTok-style) ────────────────────────────────────
+// camera(opts) resolves to { blob, kind: 'video'|'audio'|'image', seconds, prompt } or
+// { mode: 'text' | 'more' } or null. With opts.transcribe, live captions are written
+// into opts.segments as [{ t: secondsFromStart, text }].
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+const fmtClock = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
-function recordMedia(kind, opts = {}) {
+function camera(opts = {}) {
   const segments = opts.segments || [];
   return new Promise((resolve) => {
-    const maxSec = opts.maxSec || (kind === 'video' ? 60 : 300);
-    const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-    let stream, recorder, chunks = [], timer, blob = null, facing = 'user', sr = null, recording = false, t0 = 0;
-    const title = opts.title || (kind === 'video' ? 'Record a video' : 'Record your voice');
-    const sheet = openSheet(`${head(esc(title))}
-      <div class="recorder stack ${opts.full ? 'story-rec' : ''}">
-        <div class="rec-stage">
-          ${kind === 'video' ? '<video id="live" playsinline muted autoplay class="mirror"></video>' : '<div class="audio-viz" id="live">🎙️</div>'}
-          ${opts.prompt ? `<div class="rec-prompt">${esc(opts.prompt)}</div>` : ''}
-          ${opts.transcribe ? '<div class="rec-caption hidden" id="caption"></div>' : ''}
-        </div>
-        <div class="center"><span id="rstatus" class="muted">Getting ready…</span></div>
-        <div class="row" style="justify-content:center;gap:24px">
-          ${kind === 'video' ? '<button class="iconbtn" id="flip" aria-label="Flip camera">🔄</button>' : ''}
-          <button class="recbtn" id="recbtn" aria-label="Record" disabled></button>
-          ${kind === 'video' ? '<span style="width:40px"></span>' : ''}
-        </div>
-        <div class="row hidden" id="done-row"><button class="btn grow" id="retake">Retake</button><button class="btn primary grow" id="use">Use this</button></div>
-        <label class="btn ghost block small">Or upload a file<input type="file" accept="${kind}/*" ${kind === 'video' ? 'capture="user"' : ''} hidden id="upl"></label>
-      </div>`, { full: opts.full, onClose: () => { stop(); stream?.getTracks().forEach((t) => t.stop()); resolve(blob); } });
+    let kind = opts.kind || 'video';
+    const allDurs = [{ s: 600, label: '10m' }, { s: 60, label: '60s' }, { s: 15, label: '15s' }];
+    const durs = allDurs.filter((d) => !opts.maxSec || d.s <= opts.maxSec || opts.modes);
+    let maxSec = opts.maxSec || 60;
+    if (!durs.some((d) => d.s === maxSec)) durs.unshift({ s: maxSec, label: maxSec >= 60 ? `${Math.round(maxSec / 60)}m` : `${maxSec}s` });
+    let photo = false, prompt = opts.prompt || '', useTimer = false, cc = opts.transcribe !== false && !!SpeechRec;
+    let stream, recorder, chunks = [], timer, result = null, facing = 'user', sr = null, recording = false, t0 = 0, seconds = 0;
 
-    const status = $('#rstatus', sheet);
-    const btn = $('#recbtn', sheet);
-    const live = $('#live', sheet);
-    const caption = $('#caption', sheet);
+    const sheet = openSheet(`<div class="cam">
+      <video class="cam-view mirror" id="live" playsinline muted autoplay></video>
+      <div class="cam-voice hidden" id="voice">${avatar(me(), 'xl')}<div class="wave big"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+      <div class="cam-review hidden" id="review"></div>
+      <div class="cam-progress"><i id="prog"></i></div>
+      <div class="cam-top">
+        <button class="cam-btn" id="x" aria-label="Close">${icon('close')}</button>
+        <button class="cam-pill" id="pp">${prompt ? '💬 Change question' : '💬 Add a question'}</button>
+        <span class="cam-time" id="ctime"></span>
+      </div>
+      <div class="cam-rail" id="rail">
+        <button class="cam-rb" id="flip">${icon('flip')}<span>Flip</span></button>
+        <button class="cam-rb" id="tmr">${icon('timer')}<span>3s timer</span></button>
+        ${SpeechRec && opts.transcribe !== false ? `<button class="cam-rb ${cc ? 'on' : ''}" id="ccb">${icon('cc')}<span>Captions</span></button>` : ''}
+      </div>
+      <div class="cam-prompt ${prompt ? '' : 'hidden'}" id="cprompt">${esc(prompt)}</div>
+      <div class="cam-caption hidden" id="ccap"></div>
+      <div class="cam-count hidden" id="cnt"></div>
+      <div class="cam-status" id="cstatus"></div>
+      <div class="cam-bottom" id="cbottom">
+        <div class="cam-durs" id="durs">
+          ${durs.map((d) => `<button data-dur="${d.s}" class="${d.s === maxSec ? 'on' : ''}">${d.label}</button>`).join('')}
+          ${opts.modes ? '<button data-photo>PHOTO</button><button data-text>TEXT</button>' : ''}
+        </div>
+        <div class="cam-row">
+          <label class="cam-upl" aria-label="Upload from phone">${icon('image')}<input type="file" hidden id="upl" accept="${opts.modes ? 'video/*,image/*,audio/*' : `${kind}/*`}"></label>
+          <button class="cam-rec" id="rec" aria-label="Record" disabled></button>
+          <span class="cam-upl" style="visibility:hidden"></span>
+        </div>
+        ${opts.modes ? `<div class="cam-modes" id="modes"><button data-mode="video" class="on">CAMERA</button><button data-mode="audio">VOICE</button><button data-mode="more">CREATE</button></div>` : ''}
+      </div>
+      <div class="cam-done hidden" id="done"><button class="btn" id="retake">↺ Retake</button><button class="btn primary" id="next">Next ›</button></div>
+    </div>`, { full: true, cls: 'cam-sheet', onClose: () => { stopAll(); resolve(result); } });
+
+    const $c = (s) => $(s, sheet);
+    const live = $c('#live'), rec = $c('#rec'), status = $c('#cstatus'), caption = $c('#ccap');
+    const setStatus = (t) => { status.textContent = t; status.classList.toggle('hidden', !t); };
+
+    function stopStream() { stream?.getTracks().forEach((t) => t.stop()); stream = null; }
+    function stopAll() { stop(); stopStream(); }
 
     async function startStream() {
-      stream?.getTracks().forEach((t) => t.stop());
+      stopStream();
+      rec.disabled = true;
+      $c('#voice').classList.toggle('hidden', kind !== 'audio');
+      live.classList.toggle('hidden', kind === 'audio');
+      $c('#flip').classList.toggle('hidden', kind === 'audio');
       try {
         stream = await navigator.mediaDevices.getUserMedia(kind === 'video'
           ? { video: { facingMode: facing, width: { ideal: 720 }, height: { ideal: 1280 } }, audio: true }
           : { audio: true });
         if (kind === 'video') { live.srcObject = stream; live.muted = true; live.classList.toggle('mirror', facing === 'user'); live.play?.(); }
-        status.textContent = `Tap the red button to start (up to ${maxSec >= 60 ? `${Math.round(maxSec / 60)} min` : `${maxSec}s`})`;
-        btn.disabled = false;
-      } catch (err) {
-        status.textContent = 'Camera/microphone not available. You can upload a file instead.';
+        rec.disabled = false;
+        setStatus('');
+      } catch {
+        setStatus('Camera or microphone is not available. You can upload a video instead ↙');
       }
     }
 
-    // Live captions. Browsers stop listening after a pause, so restart while still recording.
     function startCaptions() {
-      if (!opts.transcribe || !SpeechRec) return;
+      if (!cc || !SpeechRec) return;
       let pendingStart = null;
       sr = new SpeechRec();
       sr.continuous = true;
@@ -818,9 +1065,7 @@ function recordMedia(kind, opts = {}) {
         caption.textContent = interim || segments[segments.length - 1]?.text || '';
         caption.classList.toggle('hidden', !caption.textContent);
       };
-      sr.onerror = (e) => {
-        if (e.error === 'not-allowed' || e.error === 'service-not-allowed' || e.error === 'audio-capture') sr = null;
-      };
+      sr.onerror = (e) => { if (['not-allowed', 'service-not-allowed', 'audio-capture'].includes(e.error)) sr = null; };
       sr.onend = () => { if (recording && sr) { try { sr.start(); } catch { /* already running */ } } };
       try { sr.start(); } catch { sr = null; }
     }
@@ -832,54 +1077,208 @@ function recordMedia(kind, opts = {}) {
       if (recorder && recorder.state !== 'inactive') recorder.stop();
     }
 
-    btn.onclick = () => {
-      if (recorder && recorder.state === 'recording') { stop(); return; }
+    function showReview(blob, k) {
+      result = { blob, kind: k, seconds, prompt };
+      const url = URL.createObjectURL(blob);
+      const rv = $c('#review');
+      rv.innerHTML = k === 'video' ? `<video src="${url}" playsinline autoplay loop></video>`
+        : k === 'image' ? `<img src="${url}" alt="">`
+          : `<div class="cam-voice">${avatar(me(), 'xl')}<audio src="${url}" controls autoplay></audio></div>`;
+      rv.classList.remove('hidden');
+      const pv = $('video', rv);
+      if (pv) pv.onclick = () => (pv.paused ? pv.play() : pv.pause()); // tap to pause/play
+      live.classList.add('hidden');
+      $c('#voice').classList.add('hidden');
+      caption.classList.add('hidden');
+      sheet.classList.add('reviewing');
+      $c('#done').classList.remove('hidden');
+      stopStream();
+      setStatus(cc && segments.length ? `✓ ${segments.length} lines written down` : '');
+    }
+
+    function takePhoto() {
+      const c = document.createElement('canvas');
+      c.width = live.videoWidth || 720;
+      c.height = live.videoHeight || 1280;
+      const ctx = c.getContext('2d');
+      if (facing === 'user') { ctx.translate(c.width, 0); ctx.scale(-1, 1); }
+      ctx.drawImage(live, 0, 0, c.width, c.height);
+      c.toBlob((b) => b && showReview(b, 'image'), 'image/jpeg', 0.9);
+    }
+
+    function startRecording() {
       chunks = [];
       segments.length = 0;
       const types = kind === 'video' ? ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'] : ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'];
       const mimeType = types.find((t) => window.MediaRecorder?.isTypeSupported?.(t));
-      try { recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined); } catch { status.textContent = 'Recording is not supported here — try uploading.'; return; }
+      try { recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined); } catch { setStatus('Recording is not supported here — try uploading.'); return; }
       recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
       recorder.onstop = () => {
-        blob = new Blob(chunks, { type: recorder.mimeType || mimeType || `${kind}/webm` });
-        btn.classList.remove('stop');
-        stream.getTracks().forEach((t) => t.stop());
-        caption?.classList.add('hidden');
-        const url = URL.createObjectURL(blob);
-        if (kind === 'video') { live.srcObject = null; live.src = url; live.muted = false; live.controls = true; live.classList.remove('mirror'); }
-        else live.innerHTML = `<audio controls src="${url}" style="width:90%"></audio>`;
-        status.textContent = opts.transcribe && segments.length
-          ? `Got it — ${segments.length} lines captured. Keep it or retake.`
-          : 'Watch it back, then keep it or retake.';
-        btn.parentElement.classList.add('hidden');
-        $('#done-row', sheet).classList.remove('hidden');
+        rec.classList.remove('stop');
+        sheet.classList.remove('recording');
+        showReview(new Blob(chunks, { type: recorder.mimeType || mimeType || `${kind}/webm` }), kind);
       };
       recorder.start(1000);
       recording = true;
-      btn.classList.add('stop');
+      rec.classList.add('stop');
+      sheet.classList.add('recording');
       t0 = Date.now();
       startCaptions();
       timer = setInterval(() => {
-        const s = Math.floor((Date.now() - t0) / 1000);
-        status.innerHTML = `<span class="rec-dot"></span>${fmt(s)} / ${fmt(maxSec)}`;
-        if (s >= maxSec) stop();
+        seconds = Math.floor((Date.now() - t0) / 1000);
+        $c('#ctime').innerHTML = `<span class="rec-dot"></span>${fmtClock(seconds)}`;
+        $c('#prog').style.width = `${Math.min(100, (seconds / maxSec) * 100)}%`;
+        if (seconds >= maxSec) stop();
       }, 250);
+    }
+
+    rec.onclick = async () => {
+      if (recording) { stop(); return; }
+      if (useTimer) {
+        const cnt = $c('#cnt');
+        for (let n = 3; n > 0; n--) { cnt.textContent = n; cnt.classList.remove('hidden'); await new Promise((r) => setTimeout(r, 1000)); }
+        cnt.classList.add('hidden');
+      }
+      if (photo) takePhoto(); else startRecording();
     };
 
-    $('#flip', sheet)?.addEventListener('click', () => { facing = facing === 'user' ? 'environment' : 'user'; startStream(); });
-    $('#retake', sheet).onclick = () => {
-      blob = null;
-      segments.length = 0;
-      if (kind === 'video') { live.removeAttribute('src'); live.controls = false; } else live.innerHTML = '🎙️';
-      btn.parentElement.classList.remove('hidden');
-      $('#done-row', sheet).classList.add('hidden');
+    $$('[data-dur]', sheet).forEach((b) => b.onclick = () => {
+      if (recording) return;
+      photo = false; maxSec = +b.dataset.dur;
+      $$('#durs button', sheet).forEach((x) => x.classList.toggle('on', x === b));
+      rec.classList.remove('photo');
+    });
+    $('[data-photo]', sheet)?.addEventListener('click', (e) => {
+      if (kind !== 'video') { kind = 'video'; syncModes(); startStream(); }
+      photo = true;
+      $$('#durs button', sheet).forEach((x) => x.classList.toggle('on', x === e.currentTarget));
+      rec.classList.add('photo');
+    });
+    $('[data-text]', sheet)?.addEventListener('click', () => { result = { mode: 'text' }; closeSheet(); });
+    const syncModes = () => $$('#modes button', sheet).forEach((x) => x.classList.toggle('on', x.dataset.mode === kind));
+    $$('#modes button', sheet).forEach((b) => b.onclick = () => {
+      if (recording) return;
+      if (b.dataset.mode === 'more') { result = { mode: 'more' }; closeSheet(); return; }
+      kind = b.dataset.mode; photo = false; rec.classList.remove('photo');
+      if (kind === 'audio' && maxSec < 60) maxSec = 600;
+      $$('#durs [data-dur]', sheet).forEach((x) => x.classList.toggle('on', +x.dataset.dur === maxSec));
+      $$('[data-photo]', sheet).forEach((x) => x.classList.toggle('hidden', kind === 'audio'));
+      syncModes(); startStream();
+    });
+    $c('#flip').onclick = () => { facing = facing === 'user' ? 'environment' : 'user'; startStream(); };
+    $c('#tmr').onclick = (e) => { useTimer = !useTimer; e.currentTarget.classList.toggle('on', useTimer); toast(useTimer ? '3-second timer on' : 'Timer off'); };
+    $('#ccb', sheet)?.addEventListener('click', (e) => { cc = !cc; e.currentTarget.classList.toggle('on', cc); toast(cc ? 'Captions on — we\'ll write down what you say' : 'Captions off'); });
+    $c('#pp').onclick = async () => {
+      const picked = await pickPrompt();
+      if (picked == null) return;
+      prompt = picked;
+      $c('#cprompt').textContent = prompt;
+      $c('#cprompt').classList.toggle('hidden', !prompt);
+      $c('#pp').textContent = prompt ? '💬 Change question' : '💬 Add a question';
+    };
+    $c('#x').onclick = () => {
+      if (result?.blob && !confirm('Throw away this recording?')) return;
+      result = null; closeSheet();
+    };
+    $c('#retake').onclick = () => {
+      result = null; segments.length = 0; seconds = 0;
+      $c('#review').classList.add('hidden'); $c('#review').innerHTML = '';
+      $c('#done').classList.add('hidden');
+      sheet.classList.remove('reviewing');
+      $c('#prog').style.width = '0'; $c('#ctime').textContent = '';
       startStream();
     };
-    $('#use', sheet).onclick = () => closeSheet();
-    $('#upl', sheet).onchange = (e) => { if (e.target.files[0]) { blob = e.target.files[0]; segments.length = 0; closeSheet(); } };
+    $c('#next').onclick = () => closeSheet();
+    $c('#upl').onchange = (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      segments.length = 0;
+      const k = f.type.startsWith('video') ? 'video' : f.type.startsWith('audio') ? 'audio' : 'image';
+      result = { blob: f, kind: k, seconds: 0, prompt };
+      closeSheet();
+    };
     startStream();
   });
 }
+
+// Pick a question/story prompt to show on screen while recording.
+function pickPrompt() {
+  return new Promise((resolve) => {
+    let picked = null;
+    const done = answeredIds(S.meId);
+    const qs = DAILY_QUESTIONS.filter((q) => !done.has(q.id)).sort(() => Math.random() - 0.5).slice(0, 6).map((q) => q.text);
+    const sheet = openSheet(`${head('Add a question')}
+      <input class="input" id="own" placeholder="Or type your own…">
+      <h3 style="margin-top:14px">Stories to tell</h3><div class="chips">${STORY_PROMPTS.map((p) => `<button class="chip" data-p="${esc(p)}">${esc(p)}</button>`).join('')}</div>
+      <h3 style="margin-top:14px">Questions</h3>${qs.map((q) => `<button class="option" data-p="${esc(q)}">${esc(q)}</button>`).join('')}
+      <div class="row" style="margin-top:12px"><button class="btn grow" id="none">No question</button><button class="btn primary grow" id="use">Use mine</button></div>`, { onClose: () => resolve(picked) });
+    $$('[data-p]', sheet).forEach((b) => b.onclick = () => { picked = b.dataset.p; closeSheet(); });
+    $('#none', sheet).onclick = () => { picked = ''; closeSheet(); };
+    $('#use', sheet).onclick = () => { picked = $('#own', sheet).value.trim(); closeSheet(); };
+  });
+}
+
+// Older call sites record one kind of media; returns just the blob.
+async function recordMedia(kind, opts = {}) {
+  const r = await camera({ ...opts, kind });
+  if (!r?.blob) return null;
+  opts.kindOut = r.kind;
+  return r.blob;
+}
+
+// The ＋ button: open the camera, then send the result to the right editor.
+actions.create = async () => {
+  if (!guard()) return;
+  const segments = [];
+  const r = await camera({ modes: true, kind: 'video', maxSec: 60, transcribe: true, segments });
+  if (!r) return;
+  if (r.mode === 'text') { openTextPost(); return; }
+  if (r.mode === 'more') { actions['create-menu'](); return; }
+  const said = segments.map((s) => s.text).join(' ');
+  if (r.kind !== 'image' && (r.seconds > 60 || segments.length >= 6)) {
+    openRecapEditor({ id: uid(), type: 'story', personId: S.meId, authorId: S.meId, title: r.prompt, text: '', mediaType: r.kind, segments: [...segments], likes: [], comments: [], createdAt: Date.now() }, r.blob);
+    return;
+  }
+  const type = r.kind === 'video' ? 'video' : r.kind === 'audio' ? 'voice' : 'photo';
+  openComposer({ type, media: { blob: r.blob, kind: r.kind }, prefill: said, title: r.prompt });
+};
+
+// TEXT mode: a colorful text card, like a TikTok text post.
+function openTextPost() {
+  let bg = BG[0];
+  const sheet = openSheet(`${head('Text post')}
+    <form class="stack">
+      <div class="text-card" id="tc" style="--tone:${bg}"><textarea name="text" placeholder="Share a thought, a memory, a saying you love…" maxlength="500"></textarea></div>
+      <div class="swatches">${BG.map((g, i) => `<button type="button" data-bg="${i}" style="background:${g}" class="${i === 0 ? 'on' : ''}" aria-label="Background ${i + 1}"></button>`).join('')}</div>
+      <label class="field"><span>Whose memory is this?</span><select class="input" name="personId">${peopleOptions(S.meId)}</select></label>
+      <button class="btn primary block">Post</button>
+    </form>`);
+  $$('[data-bg]', sheet).forEach((b) => b.onclick = () => {
+    bg = BG[+b.dataset.bg];
+    $('#tc', sheet).style.setProperty('--tone', bg);
+    $$('[data-bg]', sheet).forEach((x) => x.classList.toggle('on', x === b));
+  });
+  $('form', sheet).onsubmit = async (e) => {
+    e.preventDefault();
+    const d = formData(e.target);
+    if (!d.text.trim()) { toast('Write something first'); return; }
+    await save('posts', { id: uid(), type: 'story', personId: d.personId, authorId: S.meId, text: d.text.trim(), bg, likes: [], comments: [], createdAt: Date.now() });
+    closeAllSheets(); S.tab = 'home'; S.homeTab = 'foryou'; await render(); toast('Posted 💛');
+  };
+}
+
+actions['create-menu'] = () => {
+  openSheet(`${head('Create')}
+    <button class="tile" data-action="tell-story" style="width:100%;margin-bottom:10px;min-height:0"><span class="row"><span class="ico">🎬</span><b>Tell a story</b></span><small>Selfie video or voice, up to 10 min — we write down the highlights, the moral and the punchlines</small></button>
+    <div class="grid2">
+      ${tile('compose', '📝', 'Write a story', 'A moment worth keeping').replace('data-action="compose"', 'data-action="compose" data-kind="story"')}
+      ${tile('compose', '📷', 'Photo memory', 'The story behind a picture').replace('data-action="compose"', 'data-action="compose" data-kind="photo"')}
+      ${tile('browse-questions', '💬', 'Pick a question', 'Browse every question')}
+      ${tile('write-letter', '💌', 'Letter for later', 'Sealed for a future day')}
+      ${tile('legacy', '🕯️', 'Legacy interview', 'Your life story')}
+      ${tile('ask-family', '❓', 'Ask family', 'Send a question')}
+    </div>`);
+};
 
 // ── Story Time: record a story, then recap it ────────────────
 const clock = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
@@ -955,12 +1354,14 @@ actions['tell-story'] = ({ pid }) => {
     const prompt = $('#st-prompt', sheet).value.trim();
     const personId = $('#st-who', sheet).value;
     const segments = [];
-    const blob = await recordMedia(kind, { transcribe: true, segments, prompt: prompt || 'Tell us a story…', maxSec: 600, full: true, title: 'Story time' });
+    const ropts = { transcribe: true, segments, prompt: prompt || 'Tell us a story…', maxSec: 600 };
+    const blob = await recordMedia(kind, ropts);
     if (!blob) return;
     closeAllSheets();
+    if (ropts.kindOut === 'image') { openComposer({ type: 'photo', media: { blob, kind: 'image' }, personId, title: prompt }); return; }
     const post = {
       id: uid(), type: 'story', personId, authorId: S.meId, title: prompt, text: '',
-      mediaType: kind, segments: [...segments], likes: [], comments: [], createdAt: Date.now(),
+      mediaType: ropts.kindOut || kind, segments: [...segments], likes: [], comments: [], createdAt: Date.now(),
     };
     openRecapEditor(post, blob);
   };
@@ -1247,23 +1648,165 @@ actions['letters-to-me'] = () => {
   openSheet(`${head('💌 Letters for you')}${mine.map(letterHTML).join('') || '<div class="empty">No letters yet.</div>'}`);
 };
 
-// ── Circle (chat) ────────────────────────────────────────────
-function viewCircle(root) {
-  const mine = S.chats.filter((c) => c.memberIds.includes(S.meId));
-  root.innerHTML = `
-    <div class="row spread"><h1>Family circle</h1><button class="btn sm primary" data-action="new-chat">＋ New</button></div>
-    <p class="muted small">Group chats and one-on-one conversations with the people in your tree.</p>
-    ${mine.length ? mine.map((c) => {
-      const msgs = S.messages.filter((m) => m.chatId === c.id).sort((a, b) => a.createdAt - b.createdAt);
-      const last = msgs[msgs.length - 1];
-      const others = c.memberIds.filter((id) => id !== S.meId);
-      return `<div class="card chatlist-item" data-action="open-chat" data-id="${c.id}">
-        ${c.memberIds.length > 2 ? '<span class="avatar">👨‍👩‍👧‍👦</span>' : avatar(person(others[0]))}
-        <div class="grow"><b>${esc(c.name || others.map(nameOf).join(', '))}</b><div class="small muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${last ? `${esc(nameOf(last.personId))}: ${esc(last.text)}` : 'Say hello 👋'}</div></div>
-        ${last ? `<span class="small muted">${timeAgo(last.createdAt)}</span>` : ''}</div>`;
-    }).join('') : `<div class="empty"><span class="ico">💬</span>No conversations yet.<br><br><button class="btn primary" data-action="new-chat">Start a family chat</button></div>`}
-    <div class="card soft small"><b>Keeping everyone in the loop</b><br>Conversations live on this device and travel with your family file (Me → Backup & share). Real-time sync across phones is on the roadmap.</div>`;
+// ── Stories row (Family & Inbox) ─────────────────────────────
+const WEEK = 7 * 86400000;
+function storyPeople() {
+  const recent = (pid) => S.posts.filter((x) => x.personId === pid && Date.now() - x.createdAt < WEEK);
+  return S.people
+    .map((p) => ({ p, posts: recent(p.id), unseen: recent(p.id).some((x) => !(x.seenBy || []).includes(S.meId)) }))
+    .filter((x) => x.posts.length && x.p.id !== S.meId)
+    .sort((a, b) => (b.unseen - a.unseen) || (b.posts[0].createdAt - a.posts[0].createdAt));
 }
+
+function storiesRow() {
+  const m = me();
+  return `<div class="stories">
+    <button class="story" data-action="create"><span class="story-ring none">${avatar(m, 'st')}<span class="story-plus">${icon('plus', 'bold')}</span></span><span class="story-name">Create</span></button>
+    ${storyPeople().map(({ p, unseen }) => `<button class="story" data-action="view-stories" data-id="${p.id}"><span class="story-ring ${unseen ? '' : 'seen'}">${avatar(p, 'st')}</span><span class="story-name">${esc(p.name)}</span></button>`).join('')}
+    ${storyPeople().length ? '' : '<div class="story-empty small muted">When family posts, their stories show up here.</div>'}
+  </div>`;
+}
+
+// Full-screen stories: tap right for next, left for back.
+actions['view-stories'] = ({ id }) => {
+  const p = person(id);
+  const posts = S.posts.filter((x) => x.personId === id && Date.now() - x.createdAt < WEEK).sort((a, b) => a.createdAt - b.createdAt);
+  if (!posts.length) { actions.person({ id }); return; }
+  let i = Math.max(0, posts.findIndex((x) => !(x.seenBy || []).includes(S.meId)));
+  let timer = null;
+  const sheet = openSheet(`<div class="sv">
+    <div class="sv-bars">${posts.map(() => '<span><i></i></span>').join('')}</div>
+    <div class="sv-head">${avatar(p, 'sm')}<b>${esc(p.name)}</b><span class="sv-time"></span><span class="grow"></span><button class="cam-btn" data-action="close" aria-label="Close">${icon('close')}</button></div>
+    <div class="sv-body"></div>
+    <div class="sv-tap left"></div><div class="sv-tap right"></div>
+    <form class="sv-reply"><input class="input" name="t" placeholder="Send ${esc(p.name)} a message…" autocomplete="off"><button class="btn primary sm">Send</button></form>
+  </div>`, { full: true, cls: 'cam-sheet', onClose: () => { clearTimeout(timer); if (S.tab === 'family' || S.tab === 'inbox') render(); } });
+  const show = () => {
+    clearTimeout(timer);
+    const post = posts[i];
+    countView(post.id);
+    $$('.sv-bars span', sheet).forEach((b, k) => { b.className = k < i ? 'done' : k === i ? 'now' : ''; });
+    $('.sv-time', sheet).textContent = timeAgo(post.createdAt);
+    const body = $('.sv-body', sheet);
+    body.innerHTML = post.mediaType === 'video' ? `<video playsinline autoplay data-media="${post.mediaId}"></video>`
+      : post.mediaType === 'image' ? `<img alt="" data-media="${post.mediaId}">`
+        : post.mediaType === 'audio' ? `<div class="slide-audio" style="--tone:${bgFor(post)}">${avatar(p, 'xl')}<audio autoplay controls data-media="${post.mediaId}"></audio></div>`
+          : `<div class="slide-text" style="--tone:${bgFor(post)}">${post.questionText ? `<div class="st-q">${esc(post.questionText)}</div>` : ''}<div class="st-body">${esc(post.text || post.title)}</div></div>`;
+    if (post.mediaType && (post.questionText || post.title || post.text)) body.insertAdjacentHTML('beforeend', `<div class="sv-cap">${esc(post.questionText || post.title || '')}${post.text ? `<br><small>${esc(post.text.slice(0, 160))}</small>` : ''}</div>`);
+    hydrateMedia(body);
+    const m = $('video, audio', body);
+    const bar = $('.sv-bars .now i', sheet);
+    if (m) {
+      m.onended = next;
+      m.ontimeupdate = () => { if (m.duration) bar.style.width = `${(m.currentTime / m.duration) * 100}%`; };
+    } else {
+      bar.style.transition = 'width 6s linear';
+      requestAnimationFrame(() => { bar.style.width = '100%'; });
+      timer = setTimeout(next, 6000);
+    }
+  };
+  const next = () => { if (i < posts.length - 1) { i++; show(); } else closeSheet(); };
+  $('.sv-tap.right', sheet).onclick = next;
+  $('.sv-tap.left', sheet).onclick = () => { if (i > 0) { i--; show(); } };
+  $('.sv-reply', sheet).onsubmit = async (e) => {
+    e.preventDefault();
+    const t = e.target.t.value.trim();
+    if (!t) return;
+    const c = await chatWith(id);
+    await save('messages', { id: uid(), chatId: c.id, personId: S.meId, text: `Replying to your story: ${t}`, createdAt: Date.now() });
+    e.target.t.value = '';
+    toast('Sent 💬');
+  };
+  show();
+};
+
+// ── Family tab ───────────────────────────────────────────────
+function viewFamily(root) {
+  const others = S.people.filter((p) => p.id !== S.meId);
+  root.innerHTML = `${pageHead(hbtn('add-person', 'addUser', 'Add family'), 'Family', hbtn('search', 'search', 'Search'))}
+    ${storiesRow()}
+    <div class="section-title"><h2>Family tree</h2><button class="btn sm primary" data-action="add-person">＋ Add</button></div>
+    ${treeHTML()}
+    <div class="section-title"><h2>Everyone</h2><span class="small muted">${others.length} people</span></div>
+    ${others.map((p) => `<div class="listrow">
+      <button class="row grow" data-action="person" data-id="${p.id}" style="background:none;border:0;padding:0;text-align:left;color:inherit;cursor:pointer">${avatar(p)}<span class="grow"><b>${esc(p.name)}</b><span class="small muted" style="display:block">${esc([p.relation, years(p)].filter(Boolean).join(' · '))}</span></span></button>
+      ${p.passed ? `<button class="btn sm" data-action="open-book" data-id="${p.id}">📖 Book</button>` : `<button class="btn sm" data-action="open-chat-with" data-id="${p.id}">Message</button>`}
+    </div>`).join('') || '<div class="empty">Add your family to get started 🌱</div>'}`;
+}
+
+// ── Inbox ────────────────────────────────────────────────────
+// Things that happened to me: likes and comments on my memories, answers to my questions.
+function activityFor(pid) {
+  const out = [];
+  for (const post of S.posts) {
+    const mine = post.personId === pid || post.authorId === pid;
+    if (mine) {
+      for (const c of post.comments || []) if (c.personId !== pid) out.push({ at: c.at, who: c.personId, text: `commented: “${c.text}”`, post: post.id });
+      for (const l of post.likes || []) if (l !== pid) out.push({ at: post.createdAt, who: l, text: 'liked your memory', post: post.id });
+    }
+    if (post.askedBy === pid && post.personId !== pid) out.push({ at: post.createdAt, who: post.personId, text: `answered your question: “${post.questionText}”`, post: post.id });
+  }
+  return out.sort((a, b) => b.at - a.at);
+}
+
+function viewInbox(root) {
+  const m = me();
+  const acts = activityFor(m.id);
+  const asks = (m.askQueue || []).length;
+  const helpAlerts = S.moods.filter((x) => x.needHelp && !x.resolved && x.personId !== m.id && !x.private);
+  const letters = S.letters.filter((l) => l.toId === m.id);
+  const chats = S.chats.filter((c) => c.memberIds.includes(S.meId)).map((c) => {
+    const msgs = S.messages.filter((x) => x.chatId === c.id).sort((a, b) => a.createdAt - b.createdAt);
+    return { c, last: msgs[msgs.length - 1] };
+  }).sort((a, b) => (b.last?.createdAt || b.c.createdAt) - (a.last?.createdAt || a.c.createdAt));
+  const chatIds = new Set(chats.flatMap(({ c }) => c.memberIds));
+  const noChat = S.people.filter((p) => !p.passed && p.id !== S.meId && !chatIds.has(p.id));
+  const row = (action, data, left, title, sub, right = '') => `<button class="listrow" data-action="${action}" ${data}>${left}<div class="grow"><b>${title}</b><div class="small muted clamp1">${sub}</div></div>${right}</button>`;
+  root.innerHTML = `${pageHead(hbtn('new-chat', 'addUser', 'New chat'), 'Inbox', hbtn('search', 'search', 'Search'))}
+    ${storiesRow()}
+    ${helpAlerts.map((a) => row('open-chat-with', `data-id="${a.personId}"`, `<span class="avatar round-ico" style="--c:#b3261e;color:#fff">🆘</span>`, `${esc(nameOf(a.personId))} asked for help`, esc(a.troubling || a.note || 'Reach out now'))).join('')}
+    ${row('activity', '', `<span class="avatar round-ico" style="--c:#e8445a;color:#fff">${icon('bolt', 'fill')}</span>`, 'Activity', acts[0] ? `${esc(nameOf(acts[0].who))} ${esc(acts[0].text)}` : 'Likes, comments and answers show up here')}
+    ${asks ? row('home-tab', 'data-t="today"', `<span class="avatar round-ico" style="--c:var(--accent);color:#fff">❓</span>`, `${asks} question${asks > 1 ? 's' : ''} for you`, 'Your family wants to know') : ''}
+    ${letters.length ? row('letters-to-me', '', '<span class="avatar round-ico" style="--c:var(--leaf-soft)">💌</span>', 'Letters for you', `${letters.length} letter${letters.length > 1 ? 's' : ''} written just for you`) : ''}
+    ${chats.map(({ c, last }) => {
+      const others = c.memberIds.filter((id) => id !== S.meId);
+      const title = c.name || others.map(nameOf).join(', ');
+      const sub = last ? `${last.personId === S.meId ? 'Sent' : esc(nameOf(last.personId))}${last.mediaId ? ' a video' : `: ${esc(last.text)}`} · ${timeAgo(last.createdAt)}` : 'Say hello 👋';
+      return `<div class="listrow">
+        <button class="row grow" data-action="open-chat" data-id="${c.id}" style="background:none;border:0;padding:0;text-align:left;color:inherit;cursor:pointer;min-width:0">${others.length > 1 ? '<span class="avatar">👨‍👩‍👧‍👦</span>' : avatar(person(others[0]))}<span class="grow" style="min-width:0"><b>${esc(title)}</b><span class="small muted clamp1" style="display:block">${sub}</span></span></button>
+        <button class="iconbtn" data-action="video-msg" data-id="${c.id}" aria-label="Send a video message">${icon('camera')}</button></div>`;
+    }).join('')}
+    ${noChat.map((p) => row('open-chat-with', `data-id="${p.id}"`, avatar(p), esc(p.name), 'Start a conversation', `<span class="btn sm">Say hi</span>`)).join('')}
+    ${S.people.length < 2 ? '<div class="empty">Add family in the Family tab to start chatting 💬</div>' : ''}`;
+  S.inboxSeen = Date.now();
+  db.setKV(`inboxSeen:${m.id}`, S.inboxSeen);
+}
+
+actions.activity = () => {
+  const acts = activityFor(S.meId);
+  openSheet(`${head('Activity')}
+    ${acts.map((a) => `<button class="listrow" data-action="open-search-post" data-id="${a.post}">${avatar(person(a.who))}<div class="grow"><b>${esc(nameOf(a.who))}</b> <span>${esc(a.text)}</span><div class="small muted">${timeAgo(a.at)}</div></div></button>`).join('')
+      || '<div class="empty"><span class="ico">⚡</span>Nothing yet. When family likes or comments on your memories, you\'ll see it here.</div>'}`);
+};
+
+async function chatWith(id) {
+  let c = S.chats.find((x) => x.memberIds.length === 2 && x.memberIds.includes(id) && x.memberIds.includes(S.meId));
+  if (!c) { c = { id: uid(), name: '', memberIds: [S.meId, id], createdAt: Date.now() }; await save('chats', c); }
+  return c;
+}
+
+actions['video-msg'] = async ({ id }) => {
+  if (!guard()) return;
+  const blob = await recordMedia('video', { maxSec: 60, title: 'Video message' });
+  if (!blob) return;
+  const mid = uid();
+  await db.put('media', { id: mid, blob, type: blob.type });
+  await save('messages', { id: uid(), chatId: id, personId: S.meId, text: '', mediaId: mid, mediaType: 'video', createdAt: Date.now() });
+  toast('Video message sent 🎥');
+  if (S.tab === 'inbox') render();
+};
+
+// ── Chat ─────────────────────────────────────────────────────
 
 actions['new-chat'] = () => {
   if (!guard()) return;
@@ -1296,14 +1839,16 @@ actions['open-chat'] = ({ id }) => {
   const c = S.chats.find((x) => x.id === id);
   const title = c.name || c.memberIds.filter((x) => x !== S.meId).map(nameOf).join(', ');
   const sheet = openSheet(`${head(esc(title))}<div class="msgs" id="msgs"></div>
-    <form class="composer-bar"><input class="input" name="t" placeholder="Message…" autocomplete="off"><button class="btn primary">Send</button></form>`, { full: true, onClose: () => S.tab === 'circle' && render() });
+    <form class="composer-bar"><button type="button" class="iconbtn" id="vm" aria-label="Send a video message">${icon('camera')}</button><input class="input" name="t" placeholder="Message…" autocomplete="off"><button class="btn primary">Send</button></form>`, { full: true, onClose: () => S.tab === 'inbox' && render() });
   const paint = () => {
     const msgs = S.messages.filter((m) => m.chatId === id).sort((a, b) => a.createdAt - b.createdAt);
-    $('#msgs', sheet).innerHTML = msgs.map((m) => `<div class="msg ${m.personId === S.meId ? 'mine' : ''}">${m.personId === S.meId ? '' : `<span class="from">${esc(nameOf(m.personId))}</span>`}${esc(m.text)}</div>`).join('')
+    $('#msgs', sheet).innerHTML = msgs.map((m) => `<div class="msg ${m.personId === S.meId ? 'mine' : ''}">${m.personId === S.meId ? '' : `<span class="from">${esc(nameOf(m.personId))}</span>`}${m.mediaId ? `<video controls playsinline preload="metadata" data-media="${m.mediaId}" class="msg-video"></video>` : ''}${esc(m.text)}</div>`).join('')
       || '<div class="empty">Start the conversation 👋</div>';
+    hydrateMedia(sheet);
     sheet.scrollTop = sheet.scrollHeight;
   };
   paint();
+  $('#vm', sheet).onclick = async () => { await actions['video-msg']({ id }); paint(); };
   $('form', sheet).onsubmit = async (e) => {
     e.preventDefault();
     const t = e.target.t.value.trim();
@@ -1369,18 +1914,15 @@ function layoutTree() {
   return { rows: rows.filter(Boolean), loose, parentsOf };
 }
 
-function viewTree(root) {
+function treeHTML() {
   const { rows, loose } = layoutTree();
   const node = (p) => `<div class="node ${p.id === S.meId ? 'me' : ''}" data-action="person" data-id="${p.id}" data-node="${p.id}">
     ${avatar(p)}<div class="nm">${esc(p.name)}</div><div class="yr">${esc(p.relation && p.relation !== 'Me' ? p.relation : years(p))}</div></div>`;
-  root.innerHTML = `
-    <div class="row spread"><h1>Family tree</h1><button class="btn sm primary" data-action="add-person">＋ Add</button></div>
-    <p class="muted small">Tap anyone to see their story, ask them a question, or open their memory book.</p>
-    <div class="tree-wrap"><div class="tree" id="tree">
+  return `<div class="tree-wrap"><div class="tree" id="tree">
       <svg id="tree-lines"></svg>
       ${rows.map((row) => `<div class="tree-row">${row.map(node).join('')}</div>`).join('')}
     </div></div>
-    ${loose.length ? `<div class="section-title"><h3>Not connected yet</h3></div><p class="small muted">Edit these people to set their parents or partner.</p><div class="row wrap">${loose.map(node).join('')}</div>` : ''}
+    ${loose.length ? `<p class="small muted">Not connected yet — edit them to set parents or partner:</p><div class="row wrap">${loose.map(node).join('')}</div>` : ''}
     ${S.people.length < 3 ? `<div class="card accent"><b>Grow your tree 🌱</b><br><span class="small">Add parents, grandparents, kids and cousins. Everyone you add can have their own memory book — even loved ones who have passed.</span></div>` : ''}`;
 }
 
@@ -1419,7 +1961,7 @@ function drawTreeLines() {
   }
   svg.innerHTML = paths;
 }
-window.addEventListener('resize', () => S.tab === 'tree' && drawTreeLines());
+window.addEventListener('resize', () => S.tab === 'family' && drawTreeLines());
 
 function personForm(p = {}) {
   const others = S.people.filter((x) => x.id !== p.id);
@@ -1473,7 +2015,7 @@ function wirePersonForm(sheet, p, isNew) {
     if (p.spouseId && person(p.spouseId) && person(p.spouseId).spouseId !== p.id) { person(p.spouseId).spouseId = p.id; changed.push(person(p.spouseId)); }
     await save('people', p);
     for (const c of changed) await save('people', c);
-    closeAllSheets(); S.tab = 'tree'; await render();
+    closeAllSheets(); S.tab = 'family'; await render();
     toast(isNew ? `${p.name} added to your tree 🌳` : 'Saved');
   };
 }
@@ -1508,32 +2050,6 @@ actions['delete-person'] = async ({ id }) => {
   closeAllSheets(); render();
 };
 
-actions.person = ({ id }) => {
-  const p = person(id);
-  const posts = S.posts.filter((x) => x.personId === id);
-  const mood = S.moods.filter((x) => x.personId === id && (!x.private || id === S.meId)).sort((a, b) => b.createdAt - a.createdAt)[0];
-  const moodInfo = mood && MOODS.find((x) => x.key === mood.mood);
-  const isMe = id === S.meId;
-  openSheet(`${head('')}
-    <div class="center stack">
-      <div style="display:flex;justify-content:center">${avatar(p, 'lg')}</div>
-      <h1 style="margin:0">${esc(p.name)}</h1>
-      <div class="muted">${[p.relation !== 'Me' && p.relation, years(p), p.hometown].filter(Boolean).map(esc).join(' · ')}</div>
-      ${p.passed ? '<span class="chip">🕯️ In loving memory</span>' : ''}
-      ${moodInfo && !p.passed ? `<div class="small">Feeling ${moodInfo.emoji} ${moodInfo.label.toLowerCase()} · ${timeAgo(mood.createdAt)}${mood.note ? `<br><i>“${esc(mood.note)}”</i>` : ''}</div>` : ''}
-    </div>
-    ${aboutHTML(p)}
-    <div class="grid2" style="margin-top:14px">
-      ${tile('open-book', '📖', 'Memory book', `${posts.length} memories`).replace('data-action="open-book"', `data-action="open-book" data-id="${id}"`)}
-      ${isMe || p.passed ? tile('edit-about', '✍️', isMe ? 'Edit about me' : 'Add what you remember', isMe ? 'Likes, dislikes, bio' : 'Share your memories of them').replace('data-action="edit-about"', `data-action="edit-about" data-id="${id}"`)
-        : tile('ask-family', '❓', 'Ask a question', 'It shows up on their home screen').replace('data-action="ask-family"', `data-action="ask-family" data-to="${id}"`)}
-      ${!isMe && !p.passed ? tile('open-chat-with', '💬', 'Message', 'One-on-one chat').replace('data-action="open-chat-with"', `data-action="open-chat-with" data-id="${id}"`) : ''}
-      ${!p.passed ? tile('legacy', '🕯️', 'Legacy interview', 'Record their life story').replace('data-action="legacy"', `data-action="legacy" data-pid="${id}"`) : ''}
-      ${!p.passed ? tile('tell-story', '🎬', 'Story time', 'Record them telling a story').replace('data-action="tell-story"', `data-action="tell-story" data-pid="${id}"`) : ''}
-      ${tile('edit-person', '⚙️', 'Edit details', 'Name, family links').replace('data-action="edit-person"', `data-action="edit-person" data-id="${id}"`)}
-    </div>
-    ${p.passed ? `<button class="btn block" style="margin-top:12px" data-action="remember" data-id="${id}">🕯️ Share a memory of ${esc(p.name)}</button>` : ''}`);
-};
 
 function aboutHTML(p) {
   const list = (arr) => (arr || []).length ? `<div class="chips">${arr.map((x) => `<span class="chip">${esc(x)}</span>`).join('')}</div>` : '<span class="small muted">Nothing yet</span>';
@@ -1663,40 +2179,116 @@ ${about}${body || '<p>No memories yet.</p>'}<footer>Made with love in ${esc(CONF
   download(`${p.name.replace(/[^\w-]+/g, '_')}_Memory_Book.html`, html, 'text/html');
 };
 
-// ── Me tab ───────────────────────────────────────────────────
-function viewMe(root) {
-  const m = me();
-  const n = S.posts.filter((x) => x.personId === m.id).length;
-  const answered = answeredIds(m.id).size;
-  const moods = S.moods.filter((x) => x.personId === m.id).sort((a, b) => b.createdAt - a.createdAt).slice(0, 14);
-  const owned = SKUS.filter((s) => S.unlocked.has(s));
-  root.innerHTML = `
-    <div class="center stack">
-      <div style="display:flex;justify-content:center">${avatar(m, 'lg')}</div>
-      <h1 style="margin:0">${esc(m.name)}</h1>
-      <div class="muted small">${n} memories · ${answered} questions answered</div>
-    </div>
-    ${aboutHTML(m) || `<div class="card accent" style="margin-top:14px"><b>Tell your family about you</b><br><span class="small">What you love, what drives you crazy, who you are.</span><br><button class="btn sm primary" style="margin-top:8px" data-action="edit-about" data-id="${m.id}">Fill in “All about me”</button></div>`}
-    <div class="grid2" style="margin-top:14px">
-      ${tile('edit-about', '✍️', 'All about me', 'Loves, pet peeves, bio').replace('data-action="edit-about"', `data-action="edit-about" data-id="${m.id}"`)}
-      ${tile('open-book', '📖', 'My memory book', 'Everything I have shared').replace('data-action="open-book"', `data-action="open-book" data-id="${m.id}"`)}
-      ${tile('legacy', '🕯️', 'Legacy interview', 'My life story')}
-      ${tile('write-letter', '💌', 'Letters for later', 'For future days')}
-    </div>
-    ${moods.length ? `<div class="card"><b>My feelings lately</b><div style="font-size:1.5rem;letter-spacing:4px;margin-top:6px">${moods.reverse().map((x) => MOODS.find((y) => y.key === x.mood)?.emoji).join('')}</div></div>` : ''}
-    <div class="section-title"><h2>Account</h2></div>
-    <div class="card stack">
-      <div class="row spread"><div><b>${S.unlocked.has('base') ? 'Lifetime member 💛' : trialDaysLeft() > 0 ? `Free trial · ${trialDaysLeft()} days left` : 'Trial ended'}</b><br><span class="small muted">${owned.length ? `Unlocked: ${owned.map((s) => s === 'base' ? 'Heartroots' : PACKS[s].name).join(', ')}` : 'Viewing & exporting memories is always free.'}</span></div></div>
-      <button class="btn block primary" data-action="store">🛍️ Store & unlock codes</button>
-      <button class="btn block" data-action="share">📤 Share with family & friends</button>
-      <button class="btn block" data-action="backup">💾 Backup & share family file</button>
-      <button class="btn block" data-action="display">Aa  Text size & display</button>
-      <button class="btn block" data-action="switch-profile">👥 Switch / add profile</button>
-      <button class="btn block" data-action="help-resources">🆘 Support lines</button>
-      <button class="btn block ghost" data-action="install-help">📲 Install on your phone</button>
-    </div>
-    <p class="small muted center">Your memories are stored privately on this device. Nothing is uploaded.</p>`;
+// ── Profile (me, or anyone in the family) ────────────────────
+const gridLists = {};
+const profileTab = {};
+
+function profilePosts(pid, tab) {
+  const byPerson = S.posts.filter((x) => x.personId === pid);
+  const order = (list) => [...list].sort((a, b) => (!!b.pinned - !!a.pinned) || (b.createdAt - a.createdAt));
+  if (tab === 'stories') return order(byPerson.filter((x) => x.mediaType === 'video' || x.mediaType === 'audio' || x.recap));
+  if (tab === 'answers') return order(byPerson.filter((x) => x.type === 'answer'));
+  if (tab === 'saved') return order(S.posts.filter((x) => (x.saves || []).includes(pid)));
+  if (tab === 'liked') return order(S.posts.filter((x) => (x.likes || []).includes(pid)));
+  return order(byPerson);
 }
+
+function thumbHTML(post, key) {
+  const inner = post.mediaType === 'video' ? `<video muted playsinline preload="metadata" data-media="${post.mediaId}" data-thumb></video>`
+    : post.mediaType === 'image' ? `<img alt="" data-media="${post.mediaId}">`
+      : post.mediaType === 'audio' ? `<div class="gt-text" style="--tone:${bgFor(post)}"><span style="font-size:2rem">🎙️</span><span>${esc(post.title || post.questionText || 'Voice memory')}</span></div>`
+        : `<div class="gt-text" style="--tone:${bgFor(post)}"><span>${esc((post.questionText ? `${post.questionText} — ` : '') + (post.text || post.title || '')).slice(0, 90)}</span></div>`;
+  return `<button class="gtile" data-action="open-grid" data-key="${key}" data-id="${post.id}">${inner}
+    ${post.pinned ? '<span class="pinned">Pinned</span>' : ''}
+    ${post.questionText && post.mediaType ? `<span class="gt-title">${esc(post.questionText)}</span>` : ''}
+    <span class="views">${icon('play')}${fmtCount(post.views || 0)}</span></button>`;
+}
+
+actions['open-grid'] = ({ key, id }) => openFeedViewer(gridLists[key] || S.posts, id);
+actions['profile-tab'] = ({ pid, t }) => {
+  profileTab[pid] = t;
+  const root = $(`[data-profile="${pid}"]`);
+  if (root) { viewProfile(root.parentElement, pid); hydrateMedia(root.parentElement); }
+};
+
+function viewProfile(root, pid) {
+  const p = person(pid);
+  const isMe = pid === S.meId;
+  const tab = profileTab[pid] || 'all';
+  const posts = profilePosts(pid, tab);
+  const key = `${pid}:${tab}`;
+  gridLists[key] = posts;
+  const likes = S.posts.filter((x) => x.personId === pid).reduce((n, x) => n + (x.likes || []).length, 0);
+  const memories = S.posts.filter((x) => x.personId === pid).length;
+  const family = Math.max(0, S.people.length - 1);
+  const tabs = [
+    ['all', 'bars', 'All memories'], ['stories', 'film', 'Videos & stories'], ['answers', 'chat', 'Answers'],
+    ...(isMe ? [['letters', 'lock', 'Private letters'], ['saved', 'bookmark', 'Saved'], ['liked', 'heart', 'Liked']] : []),
+  ];
+  const chip = (action, label, data = '') => `<button class="pchip" data-action="${action}" ${data}>${label}</button>`;
+  const letters = S.letters.filter((l) => l.fromId === pid || l.toId === pid);
+  root.innerHTML = `<div class="profile" data-profile="${pid}">
+    <div class="prof-top">
+      ${isMe ? hbtn('edit-about', 'pencil', 'Edit about me', `data-id="${pid}"`) : hbtn('close', 'back', 'Back')}
+      <span class="grow"></span>
+      ${isMe ? aaBtn() + hbtn('add-person', 'addUser', 'Add family') + hbtn('profile-menu', 'menu', 'Menu') : hbtn('edit-person', 'more', 'Edit details', `data-id="${pid}"`)}
+    </div>
+    <div class="prof-head">
+      <div class="grow" style="min-width:0">
+        <h1 class="prof-name">${esc(p.name)}${p.passed ? ' 🕯️' : ''}</h1>
+        <div class="prof-handle">${esc(handle(p))}${p.relation && !isMe ? ` · ${esc(p.relation)}` : ''}</div>
+        <div class="prof-stats">
+          <div><b>${fmtCount(family)}</b><span>Family</span></div>
+          <div><b>${fmtCount(memories)}</b><span>Memories</span></div>
+          <div><b>${fmtCount(likes)}</b><span>Likes</span></div>
+        </div>
+      </div>
+      <button class="prof-av" data-action="edit-person" data-id="${pid}" aria-label="Change photo and details">${avatar(p, 'xl')}<span class="prof-plus">${icon('plus', 'bold')}</span></button>
+    </div>
+    ${p.bio ? `<p class="prof-bio">${esc(p.bio)}</p>` : isMe ? `<button class="prof-bio-add" data-action="edit-about" data-id="${pid}">＋ Tell your family about you</button>` : ''}
+    ${(p.likes || []).length ? `<div class="chips" style="margin-bottom:10px">${p.likes.slice(0, 6).map((x) => `<span class="chip">💚 ${esc(x)}</span>`).join('')}</div>` : ''}
+    <div class="pchips">
+      ${isMe
+        ? chip('open-book', '📖 Memory book', `data-id="${pid}"`) + chip('orders', '🛍️ Your orders') + chip('legacy', '🕯️ Legacy') + chip('tell-story', '🎬 Story time')
+        : (p.passed ? chip('remember', '🕯️ Share a memory', `data-id="${pid}"`) : chip('open-chat-with', '💬 Message', `data-id="${pid}"`) + chip('ask-family', '❓ Ask a question', `data-to="${pid}"`) + chip('tell-story', '🎬 Story time', `data-pid="${pid}"`) + chip('legacy', '🕯️ Legacy', `data-pid="${pid}"`))
+          + chip('open-book', '📖 Memory book', `data-id="${pid}"`)}
+    </div>
+    <div class="ptabs">${tabs.map(([t, ic, label]) => `<button class="${t === tab ? 'on' : ''}" data-action="profile-tab" data-pid="${pid}" data-t="${t}" aria-label="${label}">${icon(ic, t === 'all' ? '' : '')}</button>`).join('')}</div>
+    ${tab === 'letters'
+      ? (letters.map(letterHTML).join('') || '<div class="empty"><span class="ico">🔒</span>Letters you write or receive are kept here, private.</div>') + (isMe ? '<button class="btn block" data-action="write-letter">💌 Write a letter for later</button>' : '')
+      : posts.length ? `<div class="pgrid">${posts.map((x) => thumbHTML(x, key)).join('')}</div>`
+        : `<div class="empty"><span class="ico">🌱</span>${isMe ? 'Nothing here yet. Tap ＋ to share your first memory.' : `No memories yet. Ask ${esc(p.name)} a question to get started.`}</div>`}
+  </div>`;
+}
+
+// Opening someone from anywhere shows their profile full-screen.
+actions.person = ({ id }) => {
+  if (id === S.meId) { closeAllSheets(); S.tab = 'me'; render(); return; }
+  const sheet = openSheet('<div id="psheet"></div>', { full: true, cls: 'profile-sheet' });
+  viewProfile($('#psheet', sheet), id);
+  hydrateMedia(sheet);
+};
+
+actions['profile-menu'] = () => {
+  const owned = SKUS.filter((s) => owns(s));
+  openSheet(`${head('Settings')}
+    <div class="card small" style="margin-bottom:12px"><b>${owns('base') ? 'Lifetime member 💛' : trialDaysLeft() > 0 ? `Free trial · ${trialDaysLeft()} days left` : 'Trial ended'}</b><br>
+      <span class="muted">${owned.length ? `${owned.length} item${owned.length > 1 ? 's' : ''} unlocked` : 'Viewing & exporting memories is always free.'}</span></div>
+    <div class="menu-list">
+      <button data-action="display"><span>Aa</span>Text size & display</button>
+      <button data-action="store"><span>🛍️</span>Store & unlock codes</button>
+      <button data-action="orders"><span>📦</span>Your orders</button>
+      <button data-action="share"><span>📤</span>Share with family & friends</button>
+      <button data-action="backup"><span>💾</span>Backup & share family file</button>
+      <button data-action="books"><span>📖</span>Memory books</button>
+      <button data-action="switch-profile"><span>👥</span>Switch / add profile</button>
+      <button data-action="install-help"><span>📲</span>Install on your phone</button>
+      <button data-action="help-resources"><span>🆘</span>Support lines</button>
+    </div>
+    <p class="small muted center" style="margin-top:14px">Your memories are stored privately on this device. Nothing is uploaded.</p>`);
+};
+
+
 
 actions['install-help'] = () => {
   openSheet(`${head('Install the app')}
@@ -1721,9 +2313,9 @@ actions.backup = () => {
 actions['export-all'] = async () => {
   toast('Packing up your memories…');
   const bundle = await exportBundle();
-  const file = new File([JSON.stringify(bundle)], `heartroots-family-${today()}.json`, { type: 'application/json' });
+  const file = new File([JSON.stringify(bundle)], `unme-family-${today()}.json`, { type: 'application/json' });
   if (navigator.canShare?.({ files: [file] }) && confirm('Share the family file now (Messages, Email, Drive…)? Cancel to just download it.')) {
-    try { await navigator.share({ files: [file], title: 'Our Heartroots family file' }); return; } catch { /* fall through */ }
+    try { await navigator.share({ files: [file], title: 'Our UnMe family file' }); return; } catch { /* fall through */ }
   }
   download(file.name, file);
 };
@@ -1767,47 +2359,44 @@ async function shareLink(title, text, url) {
 
 actions.share = () => {
   const name = me()?.name || '';
-  openSheet(`${head('📤 Share Heartroots')}
+  openSheet(`${head('📤 Share UnMe')}
     ${CONFIG.familyGiftCode ? `<div class="card leaf"><b>🎁 Free for your family</b><p class="small">Send this link to family and close friends. It unlocks everything for free.</p>
       <button class="btn leaf block" data-action="share-family">Send free family link</button></div>` : ''}
-    <div class="card"><b>💛 Tell your friends</b><p class="small">Know someone who'd want to keep their family's stories? Send them Heartroots — it's just $${CONFIG.basePrice}, once.</p>
+    <div class="card"><b>💛 Tell your friends</b><p class="small">Know someone who'd want to keep their family's stories? Send them UnMe — it's just $${CONFIG.basePrice}, once.</p>
       <button class="btn primary block" data-action="share-friends">Recommend to a friend</button>
       <div class="row" style="margin-top:10px">
-        <a class="btn sm grow" href="sms:?&body=${encodeURIComponent(`I've been using Heartroots to save our family's stories. You'd love it: ${landingURL({ ref: name })}`)}">💬 Text</a>
-        <a class="btn sm grow" href="mailto:?subject=${encodeURIComponent('Save your family\'s stories')}&body=${encodeURIComponent(`I've been using Heartroots to save our family's stories — questions every day, videos, a family tree and memory books. ${landingURL({ ref: name })}`)}">✉️ Email</a>
+        <a class="btn sm grow" href="sms:?&body=${encodeURIComponent(`I've been using UnMe to save our family's stories. You'd love it: ${landingURL({ ref: name })}`)}">💬 Text</a>
+        <a class="btn sm grow" href="mailto:?subject=${encodeURIComponent('Save your family\'s stories')}&body=${encodeURIComponent(`I've been using UnMe to save our family's stories — questions every day, videos, a family tree and memory books. ${landingURL({ ref: name })}`)}">✉️ Email</a>
         <a class="btn sm grow" target="_blank" rel="noopener" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(landingURL({ ref: name }))}">📘 Facebook</a>
       </div></div>`);
 };
-actions['share-family'] = () => shareLink('Join our family on Heartroots',
-  `${me()?.name || 'I'} invited you to our family on Heartroots — your access is free 💛`, appURL({ gift: CONFIG.familyGiftCode, ref: me()?.name }));
-actions['share-friends'] = () => shareLink('Heartroots', 'Save your family\'s stories before they\'re lost — I love this app:', landingURL({ ref: me()?.name }));
+actions['share-family'] = () => shareLink('Join our family on UnMe',
+  `${me()?.name || 'I'} invited you to our family on UnMe — your access is free 💛`, appURL({ gift: CONFIG.familyGiftCode, ref: me()?.name }));
+actions['share-friends'] = () => shareLink('UnMe', 'Save your family\'s stories before they\'re lost — I love this app:', landingURL({ ref: me()?.name }));
 
-// ── Store ────────────────────────────────────────────────────
-function buyButton(sku, label) {
-  if (S.unlocked.has(sku)) return '<span class="owned">✓ Owned</span>';
+// ── Store & Marketplace ──────────────────────────────────────
+function buyButton(sku, label, cls = 'sm') {
+  if (owns(sku)) return '<span class="owned">✓ Owned</span>';
   const link = CONFIG.checkoutLinks[sku];
-  return link ? `<a class="btn sm primary" href="${esc(link)}" target="_blank" rel="noopener">${label}</a>` : `<button class="btn sm" data-action="soon">${label}</button>`;
+  return link ? `<a class="btn ${cls} primary" href="${esc(link)}" target="_blank" rel="noopener">${label}</a>` : `<button class="btn ${cls} primary" data-action="soon">${label}</button>`;
 }
 
 function openStore(message = '') {
   closeAllSheets();
-  const sheet = openSheet(`${head('🛍️ Heartroots Store')}
+  const sheet = openSheet(`${head('🛍️ UnMe')}
     ${message ? `<div class="card accent small">${esc(message)}</div>` : ''}
     <div class="card center">
       <div class="small muted">Lifetime access</div>
       <div class="price">$${CONFIG.basePrice}</div>
       <div class="small muted">One time. No subscription. Ever.</div>
       <ul class="small" style="text-align:left;margin:12px 0">
-        <li>Daily questions & the Legacy Interview</li><li>Unlimited videos, voice memories & stories</li>
-        <li>Family tree, circle chat & letters for later</li><li>Memory books you can keep forever</li>
+        <li>Daily questions, Story Time & the Legacy Interview</li><li>Unlimited videos, voice memories & stories</li>
+        <li>Family tree, chat & letters for later</li><li>Memory books you can keep forever</li>
       </ul>
-      ${buyButton('base', `Unlock for $${CONFIG.basePrice}`)}
+      ${buyButton('base', `Unlock for $${CONFIG.basePrice}`, '')}
     </div>
-    <h3>Add-ons</h3>
-    ${['parent', 'kids', 'family', 'games'].map((k) => `<div class="card plan"><span class="ico">${PACKS[k].emoji}</span><div class="grow"><b>${PACKS[k].name}</b><br><span class="small muted">${PACKS[k].tagline}</span></div>
-      <div class="center">${S.unlocked.has(k) ? '' : `<div class="small"><b>$${PACKS[k].price}</b></div>`}${buyButton(k, 'Buy')}</div></div>`).join('')}
-    ${CONFIG.checkoutLinks.bundle ? `<div class="card leaf row"><div class="grow"><b>Everything bundle</b><br><span class="small">Heartroots + all 4 add-ons</span></div>${buyButton('bundle', 'Get it all')}</div>` : ''}
-    <h3>Have a code?</h3>
+    <button class="btn block" data-action="go-shop">Browse the Marketplace →</button>
+    <h3 style="margin-top:18px">Have a code?</h3>
     <form class="row" id="code-form"><input class="input" name="code" placeholder="Enter unlock or gift code" autocapitalize="characters"><button class="btn primary">Redeem</button></form>
     <p class="small muted" style="margin-top:14px">Your saved memories are always yours — you can view and export them even without buying.</p>`);
   $('#code-form', sheet).onsubmit = async (e) => {
@@ -1819,29 +2408,290 @@ function openStore(message = '') {
 }
 actions.store = () => openStore();
 actions.soon = () => toast('Checkout is coming soon — use a gift code for now 💛');
+actions['go-shop'] = () => { closeAllSheets(); S.tab = 'home'; S.homeTab = 'shop'; render(); window.scrollTo(0, 0); };
+actions.packs = actions['go-shop'];
+actions.pack = ({ k }) => actions.product({ id: k });
 
-// ── Help packs ───────────────────────────────────────────────
-actions.packs = () => {
-  openSheet(`${head('🧰 Help packs')}
-    ${['parent', 'kids', 'family'].map((k) => tile('pack', PACKS[k].emoji, PACKS[k].name, PACKS[k].tagline, !S.unlocked.has(k)).replace('data-action="pack"', `data-action="pack" data-k="${k}"`)).join('<div style="height:10px"></div>')}
-    <br><button class="btn block" data-action="help-resources">🆘 Crisis & support lines (always free)</button>`);
+function productCard(p) {
+  return `<button class="pcard" data-action="product" data-id="${p.id}">
+    <div class="pcover" style="--pc:${p.color}"><span class="pemoji">${p.emoji}</span><span class="pcat">${esc(SHOP_CATEGORIES.find((c) => c.id === p.cat)?.label || '')}</span></div>
+    <div class="pbody"><b class="clamp2">${esc(p.name)}</b><span class="small muted clamp2">${esc(p.tagline)}</span>
+      <span class="pprice">${owns(p.id) ? '<span class="owned">✓ Owned</span>' : `$${p.price}`}</span></div>
+  </button>`;
+}
+
+function viewShop(root) {
+  const cat = S.shopCat || 'all';
+  const list = PRODUCTS.filter((p) => cat === 'all' || p.cat === cat);
+  root.innerHTML = `${homeTabs()}
+    <div class="shop-hero">
+      <div><div class="small" style="opacity:.85;font-weight:700;letter-spacing:.06em">UNME SHOP</div>
+      <h1>Help for every part of family life</h1>
+      <p class="small" style="margin:0">Parenting, kids, teens, money, faith, relationships & more. Buy once, keep forever.</p></div>
+    </div>
+    ${owns('base') ? '' : `<button class="card row" data-action="store" style="width:100%;text-align:left;cursor:pointer"><span style="font-size:2rem">🌳</span><div class="grow"><b>UnMe Lifetime</b><div class="small muted">Everything you need to save your family's story</div></div><span class="pprice">$${CONFIG.basePrice}</span></button>`}
+    <div class="catrow">${SHOP_CATEGORIES.map((c) => `<button class="chip ${c.id === cat ? 'on' : ''}" data-action="shop-cat" data-c="${c.id}">${c.emoji ? `${c.emoji} ` : ''}${c.label}</button>`).join('')}</div>
+    ${cat === 'all' ? `<button class="bundle" data-action="product" data-id="bundle"><span style="font-size:2.2rem">${BUNDLE.emoji}</span><div class="grow"><b>${BUNDLE.name}</b><div class="small">${BUNDLE.tagline}</div></div><span class="pprice">${owns('bundle') || owns('*') ? '✓ Owned' : `$${BUNDLE.price}`}</span></button>` : ''}
+    <div class="pgrid2">${list.map(productCard).join('')}</div>
+    <p class="small muted center" style="margin:18px 0">Crisis and support lines are always free: <a href="#" data-action="help-resources">see them here</a>.</p>`;
+}
+actions['shop-cat'] = ({ c }) => { S.shopCat = c; render(); };
+
+const TOOL_LABEL = { budget: '💵 Open Budget Planner', flashcards: '🧮 Play Math Flashcards', agreement: '📝 Build a Phone Agreement', journal: '🙏 Open Family Journal', organizer: '🗓️ Open Family Board & Meals', games: '🎲 Play the games' };
+const TOOL_NAME = { budget: 'Budget planner & kids\' jars', flashcards: 'Math flashcard game', agreement: 'Phone agreement builder', journal: 'Gratitude & prayer journal', organizer: 'Chore board, meal planner & grocery list', games: '3 extra family games' };
+
+// Product page, shop-style: cover, price, what's inside, guides, sticky buy bar.
+actions.product = ({ id }) => {
+  if (id === 'bundle') {
+    const all = owns('bundle') || owns('*');
+    const total = PRODUCTS.reduce((n, p) => n + p.price, 0);
+    openSheet(`${head('')}
+      <div class="prod-cover" style="--pc:#a8432d"><span>${BUNDLE.emoji}</span></div>
+      <h1 class="prod-name">${BUNDLE.name}</h1>
+      <div class="prod-price">${all ? '<span class="owned">✓ You own everything</span>' : `$${BUNDLE.price} <s>$${total.toFixed(2)}</s> <span class="save-tag">Save ${Math.round((1 - BUNDLE.price / total) * 100)}%</span>`}</div>
+      <p class="muted">${BUNDLE.tagline}</p>
+      <h3>What's inside</h3>
+      ${PRODUCTS.map((p) => `<button class="listrow" data-action="product" data-id="${p.id}"><span class="avatar" style="--c:${p.color}22">${p.emoji}</span><div class="grow"><b>${esc(p.name)}</b><div class="small muted">${esc(p.tagline)}</div></div></button>`).join('')}
+      ${all ? '' : `<div class="buybar"><div><b class="prod-price" style="margin:0">$${BUNDLE.price}</b><div class="small muted">One time · yours forever</div></div>${buyButton('bundle', 'Buy now', 'buy')}</div>`}`, { full: true });
+    return;
+  }
+  const p = product(id);
+  if (!p) return;
+  const own = owns(p.id);
+  const cat = SHOP_CATEGORIES.find((c) => c.id === p.cat);
+  const inside = [
+    `📘 ${p.sections.length} easy guide${p.sections.length > 1 ? 's' : ''}`,
+    p.tool && `🛠️ ${TOOL_NAME[p.tool]}`,
+    p.questions?.length && `💬 ${p.questions.length} conversation starters`,
+  ].filter(Boolean);
+  openSheet(`${head('', own ? '<span class="owned">✓ Owned</span>' : '')}
+    <div class="prod-cover" style="--pc:${p.color}"><span>${p.emoji}</span><em>${esc(cat?.label || '')}</em></div>
+    <h1 class="prod-name">${esc(p.name)}</h1>
+    <div class="prod-price">${own ? '<span class="owned">✓ In your orders</span>' : `$${p.price} <span class="small muted" style="font-weight:600">one time</span>`}</div>
+    <p>${esc(p.tagline)}</p>
+    <div class="prod-inside">${inside.map((x) => `<div>${x}</div>`).join('')}</div>
+    ${own && p.tool ? `<button class="btn primary block" style="margin:6px 0 14px" data-action="tool" data-id="${p.tool}">${TOOL_LABEL[p.tool]}</button>` : ''}
+    <h3>Guides</h3>
+    ${p.sections.map((s, i) => (own || i < 2)
+      ? `<details class="guide" ${i === 0 ? 'open' : ''}><summary>${esc(s.title)}</summary>${s.lines.map((l) => `<p>${esc(l)}</p>`).join('')}${s.note ? `<p class="small muted">${esc(s.note)}</p>` : ''}</details>`
+      : `<div class="guide locked">🔒 ${esc(s.title)}</div>`).join('')}
+    ${p.questions?.length ? `<h3 style="margin-top:16px">Conversation starters</h3>${(own ? p.questions : p.questions.slice(0, 2)).map((q, i) => `
+      <div class="card row"><div class="grow">${esc(q)}</div>${own ? `<button class="btn sm" data-action="answer" data-qid="p:${p.id}:${i}">Answer</button><button class="btn sm ghost" data-action="ask-with" data-q="${esc(q)}">Ask</button>` : ''}</div>`).join('')}
+      ${own || p.questions.length <= 2 ? '' : `<div class="guide locked">🔒 ${p.questions.length - 2} more starters</div>`}` : ''}
+    ${own ? '' : `<div class="buybar"><div><b class="prod-price" style="margin:0">$${p.price}</b><div class="small muted">One time · yours forever</div></div>${buyButton(p.id, 'Buy now', 'buy')}</div>`}`, { full: true });
 };
 
-actions.pack = ({ k }) => {
-  const pack = PACKS[k];
-  const owned = S.unlocked.has(k);
-  openSheet(`${head(`${pack.emoji} ${pack.name}`)}
-    <p class="muted">${pack.tagline}</p>
-    ${owned ? '' : `<div class="card accent row"><div class="grow"><b>Unlock ${pack.name}</b><br><span class="small">One-time $${pack.price}</span></div>${buyButton(k, 'Buy')}</div><p class="small muted">Preview:</p>`}
-    ${(owned ? pack.guides : pack.guides.slice(0, 1)).map((g) => `<div class="card"><h3>${esc(g.title)}</h3><p class="small">${esc(g.body)}</p></div>`).join('')}
-    ${pack.questions.length ? `<h3>Conversation starters</h3>${(owned ? pack.questions : pack.questions.slice(0, 2)).map((q, i) => `
-      <div class="card row"><div class="grow">${esc(q)}</div>${owned ? `<button class="btn sm" data-action="answer" data-qid="p:${k}:${i}">Answer</button>` : ''}</div>`).join('')}` : ''}
-    ${owned ? '' : `<div class="empty small">🔒 ${pack.guides.length - 1} more guides and ${Math.max(0, pack.questions.length - 2)} more starters inside</div>`}`);
+// Pre-fill the "ask family" sheet with a question from a pack.
+actions['ask-with'] = ({ q }) => {
+  actions['ask-family']({});
+  const box = $$('.sheet [name=text]').pop();
+  if (box) box.value = q;
 };
+
+actions.orders = () => {
+  const mine = PRODUCTS.filter((p) => owns(p.id));
+  openSheet(`${head('📦 Your orders')}
+    ${owns('base') ? '<div class="listrow"><span class="avatar">🌳</span><div class="grow"><b>UnMe Lifetime</b><div class="small muted">Owned</div></div></div>' : ''}
+    ${mine.map((p) => `<button class="listrow" data-action="product" data-id="${p.id}"><span class="avatar" style="--c:${p.color}22">${p.emoji}</span><div class="grow"><b>${esc(p.name)}</b><div class="small muted">${p.tool ? 'Tap to open' : 'Guides & questions'}</div></div>${p.tool ? `<span class="btn sm">Open</span>` : ''}</button>`).join('')}
+    ${!mine.length && !owns('base') ? '<div class="empty"><span class="ico">🛍️</span>Nothing yet.</div>' : ''}
+    <button class="btn block" data-action="go-shop" style="margin-top:12px">Browse the Marketplace</button>`);
+};
+
+// ── Marketplace tools ────────────────────────────────────────
+async function toolData(id, fallback) { return (await db.get('tools', id))?.data ?? fallback; }
+const saveTool = (id, data) => db.put('tools', { id, data, updatedAt: Date.now() });
+const money = (n) => `$${(Math.round((+n || 0) * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+
+actions.tool = ({ id }) => {
+  const fn = { budget: toolBudget, flashcards: toolFlashcards, agreement: toolAgreement, journal: toolJournal, organizer: toolOrganizer, games: () => actions.games() }[id];
+  fn?.();
+};
+
+// Family budget: single-series bar list (share of income per category) + a hero number.
+async function toolBudget() {
+  const data = await toolData('budget', {
+    income: 0,
+    cats: ['Housing', 'Food & groceries', 'Transportation', 'Utilities & phone', 'Kids & school', 'Health', 'Fun', 'Savings', 'Giving'].map((name) => ({ name, amt: 0 })),
+    jars: {},
+  });
+  const sheet = openSheet(`${head('💵 Family Budget')}
+    <div class="card"><label class="field" style="margin:0"><span>Monthly take-home income</span><input class="input" id="inc" inputmode="decimal" value="${data.income || ''}" placeholder="0"></label></div>
+    <div id="hero"></div>
+    <h3>Monthly spending</h3>
+    <div id="cats"></div>
+    <button class="btn sm ghost" id="addcat">＋ Add a category</button>
+    <div id="bars" style="margin-top:14px"></div>
+    <h3 style="margin-top:18px">Kids' jars 🫙</h3>
+    <p class="small muted" style="margin-top:0">Split allowance into Save · Spend · Give.</p>
+    <div id="jars"></div>`, { full: true });
+  const persist = () => saveTool('budget', data);
+  const paintCats = () => {
+    $('#cats', sheet).innerHTML = data.cats.map((c, i) => `<div class="row" style="margin-bottom:6px"><input class="input grow" data-cn="${i}" value="${esc(c.name)}"><input class="input" style="width:7.5rem" data-ca="${i}" inputmode="decimal" value="${c.amt || ''}" placeholder="$0" aria-label="${esc(c.name)} amount"></div>`).join('');
+    $$('[data-cn]', sheet).forEach((el) => el.oninput = () => { data.cats[+el.dataset.cn].name = el.value; paintSummary(); persist(); });
+    $$('[data-ca]', sheet).forEach((el) => el.oninput = () => { data.cats[+el.dataset.ca].amt = parseFloat(el.value) || 0; paintSummary(); persist(); });
+  };
+  const paintSummary = () => {
+    const spent = data.cats.reduce((n, c) => n + (c.amt || 0), 0);
+    const left = (data.income || 0) - spent;
+    $('#hero', sheet).innerHTML = `<div class="stat-tiles">
+      <div class="stat"><span>Income</span><b>${money(data.income)}</b></div>
+      <div class="stat"><span>Planned spending</span><b>${money(spent)}</b></div>
+      <div class="stat ${left < 0 ? 'bad' : ''}"><span>${left < 0 ? '⚠ Over budget by' : 'Left over'}</span><b>${money(Math.abs(left))}</b></div></div>`;
+    const base = Math.max(data.income || 0, spent) || 1;
+    const rows = data.cats.filter((c) => c.amt > 0).sort((a, b) => b.amt - a.amt);
+    $('#bars', sheet).innerHTML = rows.length ? `<div class="chart-title">Where the money goes <span class="small muted">(share of ${data.income ? 'income' : 'spending'})</span></div>
+      ${rows.map((c) => { const pct = Math.round((c.amt / base) * 100); return `<div class="hbar" title="${esc(c.name)}: ${money(c.amt)} (${pct}%)"><span class="hb-label">${esc(c.name)}</span><span class="hb-track"><i style="width:${Math.max(1, pct)}%"></i></span><span class="hb-val">${money(c.amt)} · ${pct}%</span></div>`; }).join('')}` : '';
+  };
+  const kids = S.people.filter((p) => !p.passed && p.birthYear && new Date().getFullYear() - +p.birthYear < 18);
+  const jarPeople = kids.length ? kids : S.people.filter((p) => !p.passed && p.id !== S.meId).slice(0, 3);
+  const paintJars = () => {
+    $('#jars', sheet).innerHTML = jarPeople.map((p) => {
+      const j = data.jars[p.id] ||= { save: 0, spend: 0, give: 0 };
+      return `<div class="card"><div class="row">${avatar(p, 'sm')}<b>${esc(p.name)}</b></div><div class="jars">${['save', 'spend', 'give'].map((k) => `<div class="jar"><span class="small muted">${k === 'save' ? '🐷 Save' : k === 'spend' ? '🛒 Spend' : '💝 Give'}</span><b>${money(j[k])}</b>
+        <span class="row" style="justify-content:center;gap:4px"><button class="btn sm" data-j="${p.id}:${k}:-1">−$1</button><button class="btn sm" data-j="${p.id}:${k}:1">+$1</button></span></div>`).join('')}</div></div>`;
+    }).join('') || '<p class="small muted">Add kids (with birth years) to your tree to give them jars.</p>';
+    $$('[data-j]', sheet).forEach((b) => b.onclick = () => {
+      const [pid, k, d] = b.dataset.j.split(':');
+      data.jars[pid][k] = Math.max(0, (data.jars[pid][k] || 0) + +d);
+      persist(); paintJars();
+    });
+  };
+  $('#inc', sheet).oninput = (e) => { data.income = parseFloat(e.target.value) || 0; paintSummary(); persist(); };
+  $('#addcat', sheet).onclick = () => { data.cats.push({ name: 'New category', amt: 0 }); paintCats(); persist(); };
+  paintCats(); paintSummary(); paintJars();
+}
+
+function toolFlashcards() {
+  let op = '+', level = 1, score = 0, streak = 0, q;
+  const sheet = openSheet(`${head('🧮 Math Flashcards')}
+    <div class="seg" style="grid-template-columns:repeat(3,1fr)" id="ops">${['+', '−', '×'].map((o) => `<button data-op="${o}" class="${o === op ? 'on' : ''}"><span class="a" style="font-size:1.6rem">${o}</span></button>`).join('')}</div>
+    <div class="seg" style="grid-template-columns:repeat(3,1fr);margin-top:8px" id="lv">${['Easy', 'Medium', 'Hard'].map((l, i) => `<button data-lv="${i + 1}" class="${i === 0 ? 'on' : ''}">${l}</button>`).join('')}</div>
+    <div class="flash" id="card"></div>
+    <div id="opts" class="grid2"></div>
+    <p class="center" id="sc"></p>`);
+  const max = () => (op === '×' ? [5, 10, 12][level - 1] : [10, 20, 100][level - 1]);
+  const next = () => {
+    const r = (n) => Math.floor(Math.random() * (n + 1));
+    let a = r(max()), b = r(max());
+    if (op === '−' && b > a) [a, b] = [b, a];
+    const ans = op === '+' ? a + b : op === '−' ? a - b : a * b;
+    const opts = new Set([ans]);
+    while (opts.size < 4) opts.add(Math.max(0, ans + Math.floor(Math.random() * 11) - 5));
+    q = { a, b, ans };
+    $('#card', sheet).innerHTML = `<b>${a} ${op} ${b} = ?</b>`;
+    $('#opts', sheet).innerHTML = [...opts].sort(() => Math.random() - 0.5).map((o) => `<button class="option center" style="font-size:1.6rem;font-weight:800" data-o="${o}">${o}</button>`).join('');
+    $$('[data-o]', sheet).forEach((b2) => b2.onclick = () => {
+      const right = +b2.dataset.o === q.ans;
+      b2.classList.add(right ? 'right' : 'wrong');
+      if (right) { score++; streak++; } else { streak = 0; $(`[data-o="${q.ans}"]`, sheet).classList.add('right'); }
+      $('#sc', sheet).innerHTML = `Score <b>${score}</b> · Streak <b>${streak}</b> ${streak >= 5 ? '🔥' : ''}${right ? ' ✅' : ' — nice try!'}`;
+      if (canSpeak && prefs().readAloud && right && streak % 5 === 0) speak('Awesome streak!');
+      setTimeout(next, right ? 700 : 1400);
+    });
+  };
+  $$('[data-op]', sheet).forEach((b) => b.onclick = () => { op = b.dataset.op; $$('[data-op]', sheet).forEach((x) => x.classList.toggle('on', x === b)); next(); });
+  $$('[data-lv]', sheet).forEach((b) => b.onclick = () => { level = +b.dataset.lv; $$('[data-lv]', sheet).forEach((x) => x.classList.toggle('on', x === b)); next(); });
+  next();
+}
+
+const AGREEMENT_ITEMS = [
+  'Phones stay out of bedrooms overnight and charge in the kitchen.',
+  'No phones at the dinner table — for anyone, parents included.',
+  'I will tell a parent if anything online makes me uncomfortable or scared. I won\'t be in trouble for telling.',
+  'I won\'t share my location, address or school with people I don\'t know in real life.',
+  'I will ask before downloading new apps.',
+  'Parents know my passcode.',
+  'No phone while driving — ever. Not even at red lights.',
+  'I will be kind online. If I wouldn\'t say it face to face, I won\'t post it.',
+  'Screen time ends at an agreed time on school nights.',
+  'If rules are broken, the phone takes a short break — we talk, then try again.',
+];
+
+async function toolAgreement() {
+  const data = await toolData('agreement', { checked: AGREEMENT_ITEMS.map(() => true), custom: [], teen: '', parent: '' });
+  const sheet = openSheet(`${head('📝 Family Phone Agreement')}
+    <p class="small muted">Build it together. Tick what you agree on, add your own, then both sign.</p>
+    <div class="card" id="items"></div>
+    <div class="row"><input class="input grow" id="own" placeholder="Add your own rule…"><button class="btn" id="add">Add</button></div>
+    <div class="row" style="margin-top:12px"><label class="field grow"><span>Teen signs</span><input class="input" id="teen" value="${esc(data.teen)}" placeholder="Name"></label><label class="field grow"><span>Parent signs</span><input class="input" id="parent" value="${esc(data.parent)}" placeholder="Name"></label></div>
+    <button class="btn primary block" id="sharebtn">📤 Share / print the agreement</button>`);
+  const all = () => [...AGREEMENT_ITEMS.map((t, i) => ({ t, on: data.checked[i], i, base: true })), ...data.custom.map((t, i) => ({ t, on: true, i, base: false }))];
+  const persist = () => saveTool('agreement', data);
+  const paint = () => {
+    $('#items', sheet).innerHTML = all().map((x) => `<label class="check"><input type="checkbox" ${x.on ? 'checked' : ''} ${x.base ? `data-b="${x.i}"` : 'disabled'}><span>${esc(x.t)}</span></label>`).join('');
+    $$('[data-b]', sheet).forEach((c) => c.onchange = () => { data.checked[+c.dataset.b] = c.checked; persist(); });
+  };
+  $('#add', sheet).onclick = () => { const v = $('#own', sheet).value.trim(); if (!v) return; data.custom.push(v); $('#own', sheet).value = ''; persist(); paint(); };
+  $('#teen', sheet).oninput = (e) => { data.teen = e.target.value; persist(); };
+  $('#parent', sheet).oninput = (e) => { data.parent = e.target.value; persist(); };
+  $('#sharebtn', sheet).onclick = () => {
+    const text = `OUR FAMILY PHONE AGREEMENT\n\n${all().filter((x) => x.on).map((x, n) => `${n + 1}. ${x.t}`).join('\n')}\n\nSigned: ${data.teen || '________'} (teen)   ${data.parent || '________'} (parent)\nDate: ${new Date().toLocaleDateString()}`;
+    if (navigator.share) navigator.share({ title: 'Family Phone Agreement', text }).catch(() => {});
+    else download('Family_Phone_Agreement.txt', text, 'text/plain');
+  };
+  paint();
+}
+
+async function toolJournal() {
+  const data = await toolData('journal', { entries: [] });
+  const sheet = openSheet(`${head('🙏 Family Journal')}
+    <div class="seg" style="grid-template-columns:repeat(3,1fr)" id="kinds">${['🙏 Gratitude', '🕊️ Prayer', '✨ Answered'].map((k, i) => `<button data-k="${i}" class="${i === 0 ? 'on' : ''}">${k}</button>`).join('')}</div>
+    <form class="stack" id="jf" style="margin-top:10px"><textarea class="input" name="t" style="min-height:90px" placeholder="Today I'm thankful for…"></textarea><button class="btn primary block">Add to journal</button></form>
+    <div id="list" style="margin-top:14px"></div>`);
+  let kind = 0;
+  const KINDS = ['🙏 Gratitude', '🕊️ Prayer', '✨ Answered'];
+  const PH = ['Today I\'m thankful for…', 'We\'re praying for…', 'A prayer that was answered…'];
+  const paint = () => {
+    $('#list', sheet).innerHTML = data.entries.slice().reverse().map((e) => `<div class="card"><div class="small muted">${KINDS[e.k]} · ${esc(nameOf(e.p))} · ${new Date(e.at).toLocaleDateString()}</div><div style="white-space:pre-wrap">${esc(e.t)}</div></div>`).join('')
+      || '<div class="empty">Your family\'s journal starts here.</div>';
+  };
+  $$('[data-k]', sheet).forEach((b) => b.onclick = () => { kind = +b.dataset.k; $$('[data-k]', sheet).forEach((x) => x.classList.toggle('on', x === b)); $('[name=t]', sheet).placeholder = PH[kind]; });
+  $('#jf', sheet).onsubmit = async (e) => {
+    e.preventDefault();
+    const t = e.target.t.value.trim();
+    if (!t) return;
+    data.entries.push({ k: kind, t, p: S.meId, at: Date.now() });
+    await saveTool('journal', data);
+    e.target.t.value = '';
+    paint();
+  };
+  paint();
+}
+
+async function toolOrganizer() {
+  const data = await toolData('organizer', { cards: [], meals: {}, groceries: [] });
+  const COLS = ['To do', 'Doing', 'Done'];
+  const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const sheet = openSheet(`${head('🗓️ Family Organizer')}
+    <div class="seg" style="grid-template-columns:1fr 1fr" id="otabs"><button data-o="board" class="on">📋 Family board</button><button data-o="meals">🍽️ Meals & groceries</button></div>
+    <div id="obody" style="margin-top:12px"></div>`, { full: true });
+  const persist = () => saveTool('organizer', data);
+  const board = () => {
+    $('#obody', sheet).innerHTML = `<form class="row" id="nc"><input class="input grow" name="t" placeholder="New chore or task…"><select class="input" name="who" style="width:auto">${S.people.filter((p) => !p.passed).map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select><button class="btn primary">Add</button></form>
+      <div class="kanban">${COLS.map((c, ci) => `<div class="kcol"><div class="kc-head">${c} <span class="muted">${data.cards.filter((x) => x.col === ci).length}</span></div>
+        ${data.cards.filter((x) => x.col === ci).map((x) => `<div class="kcard ${ci === 2 ? 'done' : ''}"><div>${esc(x.t)}</div><div class="row small muted">${avatar(person(x.who), 'sm')}${esc(nameOf(x.who))}<span class="grow"></span>
+          ${ci > 0 ? `<button class="iconbtn" data-mv="${x.id}:-1" aria-label="Move back">←</button>` : ''}${ci < 2 ? `<button class="iconbtn" data-mv="${x.id}:1" aria-label="Move forward">→</button>` : `<button class="iconbtn" data-rm="${x.id}" aria-label="Remove">✕</button>`}</div></div>`).join('')}</div>`).join('')}</div>`;
+    $('#nc', sheet).onsubmit = (e) => { e.preventDefault(); const t = e.target.t.value.trim(); if (!t) return; data.cards.push({ id: uid(), t, who: e.target.who.value, col: 0 }); persist(); board(); };
+    $$('[data-mv]', sheet).forEach((b) => b.onclick = () => { const [id, d] = b.dataset.mv.split(':'); const c = data.cards.find((x) => x.id === id); c.col = Math.min(2, Math.max(0, c.col + +d)); persist(); board(); if (c.col === 2) toast('Nice work! ✅'); });
+    $$('[data-rm]', sheet).forEach((b) => b.onclick = () => { data.cards = data.cards.filter((x) => x.id !== b.dataset.rm); persist(); board(); });
+  };
+  const meals = () => {
+    $('#obody', sheet).innerHTML = `<h3>This week's dinners</h3>${DAYS.map((d) => `<div class="row" style="margin-bottom:6px"><b style="width:3rem">${d}</b><input class="input grow" data-day="${d}" value="${esc(data.meals[d] || '')}" placeholder="What's for dinner?"></div>`).join('')}
+      <h3 style="margin-top:16px">Grocery list</h3><form class="row" id="ng"><input class="input grow" name="t" placeholder="Add an item…"><button class="btn primary">Add</button></form>
+      <div class="card" style="margin-top:8px">${data.groceries.map((g, i) => `<label class="check"><input type="checkbox" data-g="${i}" ${g.got ? 'checked' : ''}><span style="${g.got ? 'text-decoration:line-through;opacity:.6' : ''}">${esc(g.t)}</span></label>`).join('') || '<span class="small muted">Nothing on the list.</span>'}</div>
+      ${data.groceries.some((g) => g.got) ? '<button class="btn sm ghost" id="clr">Clear checked items</button>' : ''}`;
+    $$('[data-day]', sheet).forEach((el) => el.oninput = () => { data.meals[el.dataset.day] = el.value; persist(); });
+    $('#ng', sheet).onsubmit = (e) => { e.preventDefault(); const t = e.target.t.value.trim(); if (!t) return; data.groceries.push({ t, got: false }); persist(); meals(); };
+    $$('[data-g]', sheet).forEach((c) => c.onchange = () => { data.groceries[+c.dataset.g].got = c.checked; persist(); meals(); });
+    $('#clr', sheet)?.addEventListener('click', () => { data.groceries = data.groceries.filter((g) => !g.got); persist(); meals(); });
+  };
+  $$('[data-o]', sheet).forEach((b) => b.onclick = () => { $$('[data-o]', sheet).forEach((x) => x.classList.toggle('on', x === b)); (b.dataset.o === 'board' ? board : meals)(); });
+  board();
+}
 
 // ── Games ────────────────────────────────────────────────────
 actions.games = () => {
-  const g = S.unlocked.has('games');
+  const g = owns('games');
   openSheet(`${head('🎲 Family games')}
     <p class="muted small">Pass the phone around the table, or play over a video call.</p>
     <div class="grid2">
@@ -1854,7 +2704,7 @@ actions.games = () => {
     ${g ? '' : `<div class="card accent row" style="margin-top:14px"><div class="grow"><b>Family Game Night</b><br><span class="small">Unlock 3 more games · $${PACKS.games.price}</span></div>${buyButton('games', 'Buy')}</div>`}`);
 };
 
-const needGames = () => { if (S.unlocked.has('games')) return true; closeSheet(); actions.pack({ k: 'games' }); return false; };
+const needGames = () => { if (owns('games')) return true; closeSheet(); actions.pack({ k: 'games' }); return false; };
 
 actions['game-knowme'] = () => {
   const eligible = S.people.filter((p) => S.posts.filter((x) => x.personId === p.id && x.type === 'answer' && x.text).length >= 2);
@@ -2006,12 +2856,12 @@ async function handleURL() {
   const gift = params.get('gift');
   if (gift) {
     const skus = await redeemCode(gift);
-    if (skus) setTimeout(() => toast('🎁 Your family gave you Heartroots for free!'), 600);
+    if (skus) setTimeout(() => toast('🎁 Your family gave you UnMe for free!'), 600);
     changed = true;
   }
   const paid = params.get('paid');
   if (paid) {
-    const skus = paid === 'bundle' ? SKUS : SKUS.includes(paid) ? [paid] : [];
+    const skus = paid === 'bundle' ? ['bundle', 'base'] : SKUS.includes(paid) ? [paid] : [];
     if (skus.length) { await unlock(skus); setTimeout(() => toast('Thank you for your purchase 💛'), 600); }
     changed = true;
   }
@@ -2025,7 +2875,9 @@ async function handleURL() {
   devicePrefs = { ...DEFAULT_PREFS, ...(await db.getKV('prefs', {})) };
   applyPrefs();
   await handleURL();
+  S.inboxSeen = S.meId ? await db.getKV(`inboxSeen:${S.meId}`, 0) : 0;
   await render();
+  setTimeout(maybeDailyQuestion, 600);
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   }

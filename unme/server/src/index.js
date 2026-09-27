@@ -1,4 +1,4 @@
-// Heartroots story-recap helper — a Cloudflare Worker.
+// UnMe story-recap helper — a Cloudflare Worker.
 // Receives a story transcript from the app and asks Claude for a family-keepsake recap.
 // Your Anthropic API key stays here on the server; it is never sent to phones.
 import Anthropic from '@anthropic-ai/sdk';

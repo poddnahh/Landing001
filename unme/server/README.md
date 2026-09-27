@@ -1,4 +1,4 @@
-# Heartroots AI story helper (optional)
+# UnMe AI story helper (optional)
 
 Story Time works without this helper: the app writes a simple recap draft on the phone. With the helper deployed, **Claude** writes the recap instead. It gives a warm summary, the 3–5 best moments (each linked to the exact spot in the video), the moral of the story, and the punchlines. It does a much better job with rambling, real-life storytelling.
 
@@ -14,7 +14,7 @@ The helper is a tiny Cloudflare Worker. It keeps your Anthropic API key on the s
    npx wrangler secret put ANTHROPIC_API_KEY   # paste your key
    npx wrangler deploy
    ```
-3. Wrangler prints a URL like `https://heartroots-story-helper.<you>.workers.dev`. Paste it into `heartroots/app/js/config.js` as `aiSummaryUrl`.
+3. Wrangler prints a URL like `https://unme-story-helper.<you>.workers.dev`. Paste it into `unme/app/js/config.js` as `aiSummaryUrl`.
 4. If your app is not hosted at `https://poddnahh.github.io`, change `ALLOWED_ORIGIN` in `wrangler.toml` and redeploy.
 
 ## Cost

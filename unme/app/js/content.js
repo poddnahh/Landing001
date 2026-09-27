@@ -1,4 +1,4 @@
-// Heartroots content: question banks, guided interviews, help packs and game decks.
+// UnMe content: question banks, guided interviews, help packs and game decks.
 // Every question has a stable id so answers can be matched back to it.
 
 export const CATEGORIES = {
