@@ -66,8 +66,11 @@ function pickPhoto(maxSize = 1000) {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
+    input.style.display = 'none';
+    document.body.appendChild(input); // some phones only open the picker for inputs that are on the page
     input.onchange = () => {
       const f = input.files[0];
+      input.remove();
       if (!f) { resolve(null); return; }
       const img = new Image();
       img.onload = () => {
@@ -150,7 +153,7 @@ async function hydrateMedia(root = document) {
 
 function mediaTag(post) {
   if (!post.mediaId) return '';
-  if (post.mediaType === 'video') return `<video controls playsinline preload="metadata" data-media="${post.mediaId}"></video>`;
+  if (post.mediaType === 'video') return `<video controls playsinline preload="metadata" data-media="${post.mediaId}" data-thumb></video>`;
   if (post.mediaType === 'audio') return `<audio controls preload="metadata" data-media="${post.mediaId}"></audio>`;
   if (post.mediaType === 'image') return `<img alt="" data-media="${post.mediaId}">`;
   return '';
@@ -267,7 +270,7 @@ document.addEventListener('click', (e) => {
 });
 
 actions.close = () => closeSheet();
-actions.tab = ({ tab }) => { closeAllSheets(); S.tab = tab; render(); window.scrollTo(0, 0); };
+actions.tab = async ({ tab }) => { closeAllSheets(); S.tab = tab; await render(); window.scrollTo(0, 0); };
 
 // ── Display & reading preferences ────────────────────────────
 // Saved per person (Dad can have huge text while the kids keep normal),
@@ -395,6 +398,14 @@ const ICONS = {
   sound: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>',
   mute: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  watch: '<rect x="3" y="5" width="18" height="15" rx="3.5"/><path d="M3 9.5h18M8 5l2.5 4.5M13.5 5 16 9.5"/><path d="M10.5 12.5v5l4-2.5z"/>',
+  store: '<path d="M4 9.5 5.5 4h13L20 9.5a2.7 2.7 0 0 1-5.3 0 2.7 2.7 0 0 1-5.4 0A2.7 2.7 0 0 1 4 9.5z"/><path d="M5 11.5V20h14v-8.5M10 20v-5h4v5"/>',
+  bell: '<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/>',
+  messenger: '<path d="M12 3.5c4.9 0 8.5 3.5 8.5 7.9s-3.6 7.9-8.5 7.9c-.9 0-1.8-.1-2.6-.4L6 20.5v-3.1c-1.6-1.4-2.5-3.5-2.5-6 0-4.4 3.6-7.9 8.5-7.9z"/><path d="m7.5 13.5 3-3.2 2.2 2 3.8-2.8-3 3.3-2.2-2z"/>',
+  cake: '<path d="M4 20.5h16M5 20.5v-6.5a1.5 1.5 0 0 1 1.5-1.5h11a1.5 1.5 0 0 1 1.5 1.5v6.5"/><path d="M5 16c1.2 1 2.4 1 3.5 0s2.3-1 3.5 0 2.3 1 3.5 0 2.3-1 3.5 0M12 12.5V9M12 6.5c-.8-.8-.8-1.8 0-3 .8 1.2.8 2.2 0 3z"/>',
+  pin: '<path d="M12 21s-6.5-6.3-6.5-11.2a6.5 6.5 0 0 1 13 0C18.5 14.7 12 21 12 21z"/><circle cx="12" cy="9.8" r="2.4"/>',
+  work: '<rect x="3" y="7.5" width="18" height="12.5" rx="2"/><path d="M9 7.5V5.5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3 12.5h18"/>',
+  house: '<path d="M4 10.5 12 4l8 6.5V20H4z"/><path d="M10 20v-5h4v5"/>',
 };
 const icon = (n, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${ICONS[n] || ''}</svg>`;
 const handle = (p) => `@${(p?.name || 'someone').toLowerCase().replace(/[^a-z0-9]+/g, '')}`;
@@ -402,53 +413,401 @@ const handle = (p) => `@${(p?.name || 'someone').toLowerCase().replace(/[^a-z0-9
 // ── Rendering ────────────────────────────────────────────────
 let feedObserver = null;
 
+
+
+
 async function render() {
   const app = $('#app');
   applyPrefs();
   if (!me()) { document.body.classList.remove('ui-dark'); renderWelcome(app); return; }
-  const views = { home: viewHome, family: viewFamily, inbox: viewInbox, me: (root) => viewProfile(root, S.meId) };
+  const views = {
+    home: viewHome, watch: viewWatch, family: viewFamily, shop: viewShop,
+    alerts: viewAlerts, chats: viewChats, me: (root) => viewProfile(root, S.meId),
+  };
   if (!views[S.tab]) S.tab = 'home';
-  if (!S.homeTab) S.homeTab = S.posts.length ? 'foryou' : 'today';
   // Build the view off-screen first so the page never flashes blank while data loads.
   const view = document.createElement('main');
   view.id = 'view';
   const tab = S.tab;
-  const homeTab = S.homeTab;
   await views[tab](view);
-  if (tab !== S.tab || homeTab !== S.homeTab) return; // a newer render already took over
+  if (tab !== S.tab) return; // a newer render already took over
   feedObserver?.disconnect();
-  const dark = tab === 'home' && S.homeTab === 'foryou';
+  const dark = tab === 'watch';
   document.body.classList.toggle('ui-dark', dark);
   app.classList.toggle('full-bleed', dark);
   app.innerHTML = '';
   app.appendChild(view);
-  if (tab === 'family') requestAnimationFrame(drawTreeLines);
+  if (tab === 'family' && S.famTab === 'tree') requestAnimationFrame(drawTreeLines);
   renderTabbar();
   await hydrateMedia(app);
   if (dark) feedObserver = setupFeed(view);
 }
 
-function inboxBadge() {
+// ── Badges ───────────────────────────────────────────────────
+function alertsBadge() {
   const m = me();
-  if (!m) return 0;
-  const asks = (m.askQueue || []).length;
-  const help = S.moods.filter((x) => x.needHelp && !x.resolved && x.personId !== m.id && !x.private).length;
-  const seen = S.inboxSeen || 0;
-  const fresh = activityFor(m.id).filter((a) => a.at > seen).length;
-  return asks + help + fresh;
+  return m ? alertsFor(m.id).filter((a) => a.at > (S.alertsSeen || 0)).length : 0;
 }
+function chatsBadge() {
+  const mine = new Set(S.chats.filter((c) => c.memberIds.includes(S.meId)).map((c) => c.id));
+  return S.messages.filter((m) => mine.has(m.chatId) && m.personId !== S.meId && m.createdAt > (S.chatsSeen || 0)).length;
+}
+const badgeHTML = (n) => (n ? `<span class="badge">${n > 99 ? '99+' : n}</span>` : '');
 
+// Floating bottom bar, Facebook style: icons with a highlighted pill for the active tab.
 function renderTabbar() {
   let bar = $('.tabbar');
   if (!bar) { bar = document.createElement('nav'); bar.className = 'tabbar'; document.body.appendChild(bar); }
-  const badge = inboxBadge();
-  const t = (id, ico, label, extra = '') => `<button class="tab ${S.tab === id ? 'active' : ''}" data-action="tab" data-tab="${id}" aria-label="${label}">
-    <span class="tab-ico">${icon(ico, S.tab === id ? 'bold' : '')}${extra}</span>${label}</button>`;
+  const t = (id, ico, label, badge = 0) => `<button class="tab ${S.tab === id ? 'active' : ''}" data-action="tab" data-tab="${id}" aria-label="${label}">
+    <span class="tab-ico">${id === 'me' ? avatar(me(), 'tabav') : icon(ico, S.tab === id ? 'fill-soft' : '')}${badgeHTML(badge)}</span><span class="tab-l">${label}</span></button>`;
   bar.innerHTML = `<div class="tabbar-inner">
-    ${t('home', 'home', 'Home')}${t('family', 'users', 'Family')}
+    ${t('home', 'house', 'Home')}${t('watch', 'watch', 'Watch')}${t('family', 'users', 'Family')}
     <button class="tab plus" data-action="create" aria-label="Create"><span class="plus-btn">${icon('plus', 'bold')}</span></button>
-    ${t('inbox', 'inbox', 'Inbox', badge ? `<span class="badge">${badge > 99 ? '99+' : badge}</span>` : '')}${t('me', 'user', 'Profile')}</div>`;
+    ${t('shop', 'store', 'Shop')}${t('alerts', 'bell', 'Alerts', alertsBadge())}${t('me', 'user', 'Me')}</div>`;
+  hydrateMedia(bar);
 }
+
+// Page header: ☰-style title on the left, round buttons on the right.
+function fbHead(title, buttons = '') {
+  return `<header class="fbhead"><h1 class="fb-title">${title}</h1><div class="fb-btns">${buttons}</div></header>`;
+}
+const roundBtn = (action, ico, label, data = '', badge = 0) =>
+  `<button class="roundbtn" data-action="${action}" ${data} aria-label="${label}">${icon(ico)}${badgeHTML(badge)}</button>`;
+const chatBtn = () => roundBtn('tab', 'messenger', 'Chats', 'data-tab="chats"', chatsBadge());
+const pills = (items, cur, action) => `<div class="pills">${items.map(([id, label]) =>
+  `<button class="pill ${id === cur ? 'on' : ''}" data-action="${action}" data-v="${id}">${label}</button>`).join('')}</div>`;
+
+// Old links (tiles, inbox rows) still say home-tab; map them onto the new tabs.
+actions['home-tab'] = ({ t }) => { closeAllSheets(); S.tab = { shop: 'shop', today: 'home', foryou: 'watch' }[t] || 'home'; render(); window.scrollTo(0, 0); };
+actions['go-shop'] = () => { closeAllSheets(); S.tab = 'shop'; render(); window.scrollTo(0, 0); };
+
+// ── Story cards (tall, like Facebook) ────────────────────────
+function storyCards() {
+  const m = me();
+  const withPosts = storyPeople();
+  const bdays = S.people.filter((p) => p.id !== S.meId && daysToBirthday(p) != null && daysToBirthday(p) <= 1 && !withPosts.some((x) => x.p.id === p.id));
+  const card = (p, post, unseen) => {
+    const bg = !post ? `<div class="sc-bg" style="--tone:${BG[0]}"></div>`
+      : post.mediaType === 'video' ? `<video class="sc-bg" muted playsinline preload="metadata" data-media="${post.mediaId}" data-thumb></video>`
+        : post.mediaType === 'image' ? `<img class="sc-bg" alt="" data-media="${post.mediaId}">`
+          : `<div class="sc-bg sc-text" style="--tone:${bgFor(post)}">${esc((post.text || post.title || post.questionText || '').slice(0, 70))}</div>`;
+    const dtb = daysToBirthday(p);
+    return `<button class="scard" data-action="${post ? 'view-stories' : 'person'}" data-id="${p.id}">${bg}
+      <span class="sc-av ${unseen ? 'ring' : ''}">${avatar(p, 'sm')}</span>
+      ${dtb === 0 ? '<span class="sc-badge">Birthday 🎂</span>' : dtb === 1 ? '<span class="sc-badge">Birthday tomorrow</span>' : ''}
+      <b class="sc-name">${esc(p.name)}</b></button>`;
+  };
+  return `<div class="scards">
+    <button class="scard create" data-action="create"><span class="sc-me">${avatar(m, 'xl')}</span><span class="sc-plus">${icon('plus', 'bold')}</span><b>Create story</b></button>
+    ${withPosts.map(({ p, posts, unseen }) => card(p, posts[0], unseen)).join('')}
+    ${bdays.map((p) => card(p, null, false)).join('')}
+  </div>`;
+}
+
+// ── Home: Facebook-style feed ────────────────────────────────
+async function viewHome(root) {
+  const m = me();
+  const qs = await todaysQuestions(m);
+  const done = answeredIds(m.id);
+  const lastMood = S.moods.filter((x) => x.personId === m.id).sort((a, b) => b.createdAt - a.createdAt)[0];
+  const moodToday = lastMood && localDate(new Date(lastMood.createdAt)) === today();
+  const helpAlerts = S.moods.filter((x) => x.needHelp && !x.resolved && x.personId !== m.id && !x.private);
+  const myHelp = S.moods.find((x) => x.needHelp && !x.resolved && x.personId === m.id);
+  const trial = !owns('base') ? trialDaysLeft() : null;
+  const letters = S.letters.filter((l) => l.toId === m.id);
+  const open = qs.filter((q) => !done.has(q.id));
+
+  root.innerHTML = `${fbHead(`<span class="logo">UnMe</span>`, aaBtn() + roundBtn('create', 'plus', 'Create') + roundBtn('search', 'search', 'Search') + chatBtn())}
+    <div class="fbcard composer-row">
+      <button class="plain" data-action="tab" data-tab="me">${avatar(m)}</button>
+      <button class="whats" data-action="create">Tell your family something…</button>
+      <button class="iconbtn photo-ico" data-action="compose" data-kind="photo" aria-label="Photo">${icon('image')}</button>
+    </div>
+    ${storyCards()}
+
+    ${helpAlerts.map((a) => `<div class="card alert">
+      <div class="row">${avatar(person(a.personId))}<div class="grow"><b>${esc(nameOf(a.personId))} asked for help</b><br><span class="small">${esc(a.troubling || a.note || 'They could use someone right now.')}</span></div></div>
+      <div class="row" style="margin-top:10px"><button class="btn sm primary" data-action="resolve-help" data-id="${a.id}">I'm on it 💛</button><button class="btn sm" data-action="open-chat-with" data-id="${a.personId}">Message</button></div></div>`).join('')}
+    ${myHelp ? `<div class="card alert"><b>You asked for help.</b> Your family can see it. <a href="#" data-action="help-resources">See support lines</a></div>` : ''}
+    ${trial !== null && trial <= 3 ? `<div class="card accent row"><div class="grow"><b>${trial > 0 ? `${trial} day${trial === 1 ? '' : 's'} left in your free week` : 'Your free week has ended'}</b><br><span class="small">Unlock for life — just $${CONFIG.basePrice}, one time.</span></div><button class="btn primary sm" data-action="store">Unlock</button></div>` : ''}
+
+    ${open.map((q) => questionCard(q, false)).join('')}
+    ${!open.length ? `<div class="card row"><span style="font-size:1.6rem">✅</span><div class="grow"><b>Today's questions are done!</b><div class="small muted">Your family will love reading them.</div></div><button class="btn sm" data-action="more-question">One more</button></div>` : ''}
+
+    <div class="card">
+      <div class="row spread" style="margin-bottom:8px"><b>How are you feeling${moodToday ? ' now' : ' today'}?</b>${lastMood ? `<span class="small muted">Last: ${MOODS.find((x) => x.key === lastMood.mood)?.emoji || ''} ${timeAgo(lastMood.createdAt)}</span>` : ''}</div>
+      <div class="moods">${MOODS.map((x) => `<button class="mood" data-action="mood" data-mood="${x.key}">${x.emoji}<small>${x.short}</small></button>`).join('')}</div>
+    </div>
+
+    ${letters.length ? `<div class="card leaf row" data-action="letters-to-me" style="cursor:pointer"><span style="font-size:1.8rem">💌</span><div class="grow"><b>You have ${letters.length} letter${letters.length > 1 ? 's' : ''}</b><br><span class="small">Written just for you.</span></div><span>›</span></div>` : ''}
+
+    <div class="shortcuts">
+      ${[['tell-story', '🎬', 'Tell a story'], ['legacy', '🕯️', 'Legacy'], ['ask-family', '❓', 'Ask family'], ['write-letter', '💌', 'Letters'], ['games', '🎲', 'Games'], ['books', '📖', 'Memory books']]
+        .map(([a, e, l]) => `<button data-action="${a}"><span>${e}</span>${l}</button>`).join('')}
+    </div>
+
+    <div class="section-title"><h2>From your family</h2><button class="btn sm" data-action="tab" data-tab="watch">▶ Watch all</button></div>
+    ${S.posts.length ? S.posts.slice(0, 30).map(postCard).join('') : '<div class="empty"><span class="ico">🌱</span>Nothing yet. Tap “Tell your family something…” to share the first memory.</div>'}`;
+}
+
+// A Facebook-style post card.
+function postCard(post) {
+  const p = person(post.personId);
+  const addedBy = post.authorId && post.authorId !== post.personId ? ` · added by ${esc(nameOf(post.authorId))}` : '';
+  const mine = post.personId === S.meId || post.authorId === S.meId;
+  const textOnly = !post.mediaType && post.bg;
+  return `<article class="fbpost" id="fb-${post.id}">
+    <header>${`<button class="plain" data-action="person" data-id="${post.personId}">${avatar(p)}</button>`}<div class="grow"><b data-action="person" data-id="${post.personId}" style="cursor:pointer">${esc(p?.name || 'Someone')}</b><div class="small muted">${timeAgo(post.createdAt)} · ${TYPE_LABEL[post.type] || ''}${addedBy}</div></div>
+      ${mine ? `<button class="iconbtn" data-action="post-menu" data-id="${post.id}" aria-label="More">${icon('more')}</button>` : ''}</header>
+    ${post.questionText ? `<div class="fb-q">“${esc(post.questionText)}”</div>` : ''}
+    ${post.title && !textOnly ? `<h3 class="fb-title2">${esc(post.title)}</h3>` : ''}
+    ${textOnly ? `<div class="fb-color" style="--tone:${post.bg}">${esc(post.text)}</div>` : post.text ? `<div class="fb-text">${esc(post.text)}</div>` : ''}
+    ${post.mediaType ? `<div class="fb-media">${mediaTag(post)}</div>` : ''}
+    ${recapHTML(post)}
+    <div data-fbbar="${post.id}">${fbBar(post)}</div>
+  </article>`;
+}
+
+function fbBar(post) {
+  const liked = (post.likes || []).includes(S.meId);
+  const nl = (post.likes || []).length, nc = (post.comments || []).length;
+  return `<div class="fb-counts">${nl ? `<span>❤️ ${nl}</span>` : '<span></span>'}${nc ? `<button class="plain small muted" data-action="comments" data-id="${post.id}">${nc} comment${nc > 1 ? 's' : ''}</button>` : ''}</div>
+    <div class="fb-actions">
+      <button class="${liked ? 'liked' : ''}" data-action="like" data-id="${post.id}">${icon('heart', liked ? 'fill' : '')} Like</button>
+      <button data-action="comments" data-id="${post.id}">${icon('comment')} Comment</button>
+      <button data-action="share-post" data-id="${post.id}">${icon('share')} Share</button>
+    </div>`;
+}
+
+// ── Watch: TikTok-style full-screen feed ─────────────────────
+function viewWatch(root) {
+  const posts = feedOrder();
+  root.innerHTML = `<nav class="toptabs on-dark">${aaBtn()}<div class="tt-list"><button class="on">For You</button></div>${hbtn('search', 'search', 'Search')}</nav>
+    <div class="feed" id="feed">${posts.length ? posts.map(slideHTML).join('') : `
+      <section class="slide"><div class="slide-text" style="--tone:linear-gradient(160deg,#a8432d,#3b6446)"><div class="st-body">🌱<br>No memories yet.<br><small>Tap ＋ to record the first one.</small></div></div></section>`}</div>`;
+}
+
+// ── Alerts: Facebook-style notifications ─────────────────────
+const ALERT_BADGE = {
+  story: ['film', '#1877f2'], memory: ['image', '#1877f2'], comment: ['comment', '#2e9e52'], like: ['heart', '#e8264a'],
+  answer: ['chat', '#a8432d'], ask: ['chat', '#e07b00'], help: ['bolt', '#b3261e'], birthday: ['cake', '#c2185b'], letter: ['inbox', '#3b6446'],
+};
+
+function alertsFor(pid) {
+  const out = activityFor(pid).map((a) => ({ ...a, type: a.text.startsWith('liked') ? 'like' : a.text.startsWith('commented') ? 'comment' : 'answer', action: 'open-search-post', data: a.post }));
+  const m = person(pid);
+  for (const a of m?.askQueue || []) out.push({ at: a.at || Date.now(), who: a.fromId, text: `asked you: “${a.text}”`, type: 'ask', action: 'home-tab', data: 'today' });
+  for (const post of S.posts) {
+    if (post.personId === pid || Date.now() - post.createdAt > 3 * 86400000) continue;
+    const text = post.mediaType === 'video' ? 'added a story with video you can watch.' : post.mediaType === 'audio' ? 'recorded a voice memory.' : post.questionText ? `answered “${post.questionText}”` : 'shared a new memory.';
+    if (post.askedBy === pid) continue; // already listed as "answered your question"
+    out.push({ at: post.createdAt, who: post.personId, text, type: post.mediaType === 'video' ? 'story' : 'memory', action: 'open-search-post', data: post.id });
+  }
+  for (const x of S.moods) if (x.needHelp && !x.resolved && x.personId !== pid && !x.private) out.push({ at: x.createdAt, who: x.personId, text: 'asked for help. Reach out now.', type: 'help', action: 'open-chat-with', data: x.personId });
+  const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+  for (const p of S.people) {
+    const d = daysToBirthday(p);
+    if (p.id === pid || d == null || d > 7) continue;
+    out.push({ at: midnight.getTime(), who: p.id, text: d === 0 ? 'has a birthday today! 🎂 Send a video.' : d === 1 ? 'has a birthday tomorrow.' : `has a birthday in ${d} days.`, type: 'birthday', action: 'video-to', data: p.id });
+  }
+  for (const l of S.letters) if (l.toId === pid && !isSealed(l)) out.push({ at: l.createdAt, who: l.fromId, text: 'wrote you a letter.', type: 'letter', action: 'letters-to-me', data: '' });
+  return out.sort((a, b) => b.at - a.at);
+}
+
+function viewAlerts(root) {
+  const all = alertsFor(S.meId);
+  const seen = S.alertsSeen || 0;
+  const row = (a) => {
+    const [ic, color] = ALERT_BADGE[a.type] || ALERT_BADGE.memory;
+    return `<button class="alert-row ${a.at > seen ? 'unread' : ''}" data-action="${a.action}" data-id="${a.data}" data-t="${a.data}">
+      <span class="al-av">${avatar(person(a.who), 'lg')}<span class="al-badge" style="background:${color}">${icon(ic, 'fill-soft')}</span></span>
+      <span class="grow"><b>${esc(nameOf(a.who))}</b> ${esc(a.text)} <span class="muted">${timeAgo(a.at)}</span></span></button>`;
+  };
+  const fresh = all.filter((a) => a.at > seen), earlier = all.filter((a) => a.at <= seen);
+  root.innerHTML = `${fbHead('Alerts', roundBtn('search', 'search', 'Search') + chatBtn())}
+    ${fresh.length ? `<h2 class="al-h">New</h2>${fresh.map(row).join('')}` : ''}
+    ${earlier.length ? `<h2 class="al-h">Earlier</h2>${earlier.slice(0, 60).map(row).join('')}` : ''}
+    ${all.length ? '' : '<div class="empty"><span class="ico">🔔</span>No alerts yet. When family posts, comments, asks you something or has a birthday, you\'ll see it here.</div>'}`;
+  S.alertsSeen = Date.now();
+  db.setKV(`alertsSeen:${S.meId}`, S.alertsSeen);
+}
+
+// Record a video message straight to someone (e.g. a birthday video).
+actions['video-to'] = async ({ id }) => {
+  const c = await chatWith(id);
+  await actions['video-msg']({ id: c.id });
+};
+
+// ── Chats (Messenger) ────────────────────────────────────────
+function viewChats(root) {
+  const chats = S.chats.filter((c) => c.memberIds.includes(S.meId)).map((c) => {
+    const msgs = S.messages.filter((x) => x.chatId === c.id).sort((a, b) => a.createdAt - b.createdAt);
+    return { c, last: msgs[msgs.length - 1] };
+  }).sort((a, b) => (b.last?.createdAt || b.c.createdAt) - (a.last?.createdAt || a.c.createdAt));
+  const chatIds = new Set(chats.flatMap(({ c }) => c.memberIds));
+  const noChat = S.people.filter((p) => !p.passed && p.id !== S.meId && !chatIds.has(p.id));
+  const seen = S.chatsSeen || 0;
+  root.innerHTML = `${fbHead('Chats', roundBtn('new-chat', 'pencil', 'New chat') + roundBtn('search', 'search', 'Search'))}
+    ${storiesRow()}
+    ${chats.map(({ c, last }) => {
+      const others = c.memberIds.filter((id) => id !== S.meId);
+      const title = c.name || others.map(nameOf).join(', ');
+      const unread = last && last.personId !== S.meId && last.createdAt > seen;
+      const sub = last ? `${last.personId === S.meId ? 'You' : esc(nameOf(last.personId))}${last.mediaId ? ' sent a video' : `: ${esc(last.text)}`} · ${timeAgo(last.createdAt)}` : 'Say hello 👋';
+      return `<div class="listrow ${unread ? 'unread' : ''}">
+        <button class="row grow plain" data-action="open-chat" data-id="${c.id}" style="min-width:0">${others.length > 1 ? '<span class="avatar">👨‍👩‍👧‍👦</span>' : avatar(person(others[0]))}<span class="grow" style="min-width:0"><b>${esc(title)}</b><span class="small muted clamp1" style="display:block">${sub}</span></span></button>
+        <button class="iconbtn" data-action="video-msg" data-id="${c.id}" aria-label="Send a video message">${icon('camera')}</button></div>`;
+    }).join('')}
+    ${noChat.map((p) => `<button class="listrow" data-action="open-chat-with" data-id="${p.id}">${avatar(p)}<div class="grow"><b>${esc(p.name)}</b><div class="small muted">Start a conversation</div></div><span class="btn sm">Say hi</span></button>`).join('')}
+    ${S.people.length < 2 ? '<div class="empty">Add family in the Family tab to start chatting 💬</div>' : ''}`;
+  S.chatsSeen = Date.now();
+  db.setKV(`chatsSeen:${S.meId}`, S.chatsSeen);
+}
+
+// ── Family: Facebook "Friends" style ─────────────────────────
+function viewFamily(root) {
+  const tab = S.famTab || 'family';
+  const others = S.people.filter((p) => p.id !== S.meId);
+  let body = '';
+  if (tab === 'family') {
+    body = others.map((p) => `<div class="friend">
+      <button class="plain" data-action="person" data-id="${p.id}">${avatar(p, 'xl')}</button>
+      <div class="grow" style="min-width:0"><b class="clamp1" style="display:block;font-size:1.1rem">${esc(p.name)}</b>
+        <div class="small muted clamp1">${esc([p.relation, p.livesIn || p.hometown, years(p)].filter(Boolean).join(' · '))}</div>
+        <div class="row" style="margin-top:6px">${p.passed
+          ? `<button class="btn sm primary grow" data-action="open-book" data-id="${p.id}">📖 Memory book</button><button class="btn sm grow" data-action="remember" data-id="${p.id}">🕯️ Remember</button>`
+          : `<button class="btn sm primary grow" data-action="open-chat-with" data-id="${p.id}">Message</button><button class="btn sm grow" data-action="ask-family" data-to="${p.id}">Ask</button>`}</div></div></div>`).join('')
+      || '<div class="empty">Add your family to get started 🌱<br><br><button class="btn primary" data-action="add-person">＋ Add family</button></div>';
+  } else if (tab === 'birthdays') {
+    const list = S.people.filter((p) => daysToBirthday(p) != null).sort((a, b) => daysToBirthday(a) - daysToBirthday(b));
+    const noBday = S.people.filter((p) => !p.birthday && !p.passed);
+    body = list.map((p) => {
+      const d = daysToBirthday(p);
+      const age = p.birthday ? new Date().getFullYear() + (d > 0 && new Date(new Date().getFullYear(), +p.birthday.slice(5, 7) - 1, +p.birthday.slice(8, 10)) < new Date() ? 1 : 0) - +p.birthday.slice(0, 4) : null;
+      return `<div class="friend">${avatar(p, 'lg')}<div class="grow"><b>${esc(p.name)}</b>
+        <div class="small ${d === 0 ? '' : 'muted'}">${d === 0 ? '🎂 <b>Birthday today!</b>' : d === 1 ? 'Tomorrow' : `In ${d} days`} · ${bdayText(p)}${age && age > 0 && age < 120 ? ` · turns ${age}` : ''}</div>
+        ${p.id === S.meId ? '' : `<div class="row" style="margin-top:6px"><button class="btn sm primary grow" data-action="video-to" data-id="${p.id}">🎥 Birthday video</button><button class="btn sm grow" data-action="write-letter">💌 Letter</button></div>`}</div></div>`;
+    }).join('') || '<div class="empty"><span class="ico">🎂</span>No birthdays yet.</div>';
+    if (noBday.length) body += `<p class="small muted" style="margin-top:14px">Missing birthdays: ${noBday.map((p) => `<a href="#" data-action="edit-person" data-id="${p.id}">${esc(p.name)}</a>`).join(', ')}</p>`;
+  } else if (tab === 'tree') {
+    body = `<div class="row spread" style="margin:6px 0"><span class="small muted">Tap anyone to see their profile.</span><button class="btn sm primary" data-action="add-person">＋ Add</button></div>${treeHTML()}`;
+  } else {
+    body = S.people.map((p) => { const n = S.posts.filter((x) => x.personId === p.id).length; return `<button class="listrow" data-action="open-book" data-id="${p.id}">${avatar(p)}<div class="grow"><b>${esc(p.name)}</b><div class="small muted">${n} memor${n === 1 ? 'y' : 'ies'}</div></div><span>›</span></button>`; }).join('');
+  }
+  root.innerHTML = `${fbHead('Family', roundBtn('add-person', 'plus', 'Add family') + roundBtn('search', 'search', 'Search') + chatBtn())}
+    ${pills([['family', 'Your family'], ['birthdays', 'Birthdays'], ['tree', 'Family tree'], ['books', 'Memory books']], tab, 'fam-tab')}
+    ${storyCards()}
+    ${body}`;
+}
+actions['fam-tab'] = ({ v }) => { S.famTab = v; render(); };
+
+// ── Shop: Facebook Marketplace style ─────────────────────────
+const NEW_PRODUCTS = new Set(['budget', 'learn', 'teens', 'faith', 'organizer', 'together']);
+
+function viewShop(root) {
+  const cat = S.shopCat || 'all';
+  const list = PRODUCTS.filter((p) => cat === 'all' || p.cat === cat);
+  root.innerHTML = `${fbHead('Shop', roundBtn('orders', 'bag', 'Your orders') + roundBtn('search', 'search', 'Search'))}
+    ${pills([['all', 'For you'], ...SHOP_CATEGORIES.filter((c) => c.id !== 'all').map((c) => [c.id, c.label])], cat, 'shop-cat')}
+    ${owns('base') ? '' : `<button class="newrow" data-action="store"><span class="avatar lg" style="--c:#fbe3da">🌳</span><span class="grow"><b>UnMe Lifetime</b> — save your family's story forever. <span class="muted">$${CONFIG.basePrice} one time</span></span>${icon('more')}</button>`}
+    ${cat === 'all' && !(owns('bundle') || owns('*')) ? `<button class="newrow" data-action="product" data-id="bundle"><span class="avatar lg" style="--c:#fde8c8">${BUNDLE.emoji}</span><span class="grow">The <b class="link">${BUNDLE.name}</b> — every pack for <b>$${BUNDLE.price}</b>.</span>${icon('more')}</button>` : ''}
+    <div class="row spread" style="margin:14px 0 8px"><h2 style="margin:0">Today's picks</h2><span class="link small">One-time · keep forever</span></div>
+    <div class="mgrid">${list.map((p) => `<button class="mtile" data-action="product" data-id="${p.id}">
+      <span class="mimg" style="--pc:${p.color}"><span>${p.emoji}</span>${owns(p.id) ? '<em>✓ Owned</em>' : NEW_PRODUCTS.has(p.id) ? '<em>Just listed</em>' : ''}</span>
+      <span class="mcap"><b>$${p.price}</b> · ${esc(p.name)}</span></button>`).join('')}</div>
+    <p class="small muted center" style="margin:18px 0">Crisis and support lines are always free: <a href="#" data-action="help-resources">see them here</a>.</p>`;
+}
+actions['shop-cat'] = ({ v, c }) => { S.shopCat = v || c; render(); };
+
+// ── Profile: Facebook header + TikTok grid ───────────────────
+function viewProfile(root, pid) {
+  const p = person(pid);
+  const isMe = pid === S.meId;
+  const tab = profileTab[pid] || 'all';
+  const posts = tab === 'photos' ? profilePosts(pid, 'all').filter((x) => x.mediaType === 'image') : profilePosts(pid, tab);
+  const key = `${pid}:${tab}`;
+  gridLists[key] = posts;
+  const likes = S.posts.filter((x) => x.personId === pid).reduce((n, x) => n + (x.likes || []).length, 0);
+  const memories = S.posts.filter((x) => x.personId === pid).length;
+  const fam = S.people.filter((x) => x.id !== pid);
+  const letters = S.letters.filter((l) => l.fromId === pid || l.toId === pid);
+  const info = [p.work && `${icon('work')}${esc(p.work)}`, p.livesIn && `${icon('pin')}${esc(p.livesIn)}`].filter(Boolean);
+  const detail = (ic, label, val) => (val ? `<div class="pd-row">${icon(ic)}<span>${label ? `<span class="muted">${label}</span> ` : ''}${esc(val)}</span></div>` : '');
+  const filters = [['all', 'All'], ['stories', 'Videos'], ['answers', 'Answers'], ['photos', 'Photos'], ...(isMe ? [['letters', 'Letters'], ['saved', 'Saved'], ['liked', 'Liked']] : [])];
+  root.innerHTML = `<div class="profile fbprofile" data-profile="${pid}">
+    <div class="cover" ${p.coverId ? '' : `style="--tone:${bgFor({ personId: pid })}"`}>
+      ${p.coverId ? `<img alt="" data-media="${p.coverId}">` : ''}
+      <div class="cover-top">
+        ${isMe ? `<button class="roundbtn glass" data-action="profile-menu" aria-label="Menu">${icon('menu')}</button>` : `<button class="roundbtn glass" data-action="close" aria-label="Back">${icon('back')}</button>`}
+        <span class="grow"></span>
+        ${isMe ? `<button class="roundbtn glass aa" data-action="display" aria-label="Text size">Aa</button>` : ''}
+        <button class="roundbtn glass" data-action="edit-person" data-id="${pid}" aria-label="Edit">${icon('pencil')}</button>
+        <button class="roundbtn glass" data-action="search" aria-label="Search">${icon('search')}</button>
+      </div>
+      <button class="cover-cam" data-action="set-photo" data-id="${pid}" data-kind="cover" aria-label="Change cover photo">${icon('camera')}</button>
+    </div>
+    <div class="pf-avwrap"><button class="plain" data-action="set-photo" data-id="${pid}" data-kind="photo" aria-label="Change profile picture">${avatar(p, 'huge')}<span class="pf-cam">${icon('camera')}</span></button></div>
+    <h1 class="pf-name">${esc(p.name)}${p.passed ? ' 🕯️' : ''}</h1>
+    <div class="pf-stats"><b>${fmtCount(fam.length)}</b> family · <b>${fmtCount(memories)}</b> memories · <b>${fmtCount(likes)}</b> likes</div>
+    ${info.length ? `<div class="pf-info">${info.join('<span class="dot">·</span>')}</div>` : ''}
+    ${fam.length ? `<button class="pf-fam plain" data-action="tab" data-tab="family"><span class="stack-av">${fam.slice(0, 3).map((x) => avatar(x, 'sm')).join('')}</span>${fam.length} family member${fam.length > 1 ? 's' : ''}${p.relation && !isMe ? ` · ${esc(p.relation)}` : ''}</button>` : ''}
+    <div class="pf-btns">${isMe
+      ? `<button class="btn primary grow" data-action="open-book" data-id="${pid}">📖 Memory book</button><button class="btn gray grow" data-action="create">＋ Create</button>`
+      : p.passed
+        ? `<button class="btn primary grow" data-action="open-book" data-id="${pid}">📖 Memory book</button><button class="btn gray grow" data-action="remember" data-id="${pid}">🕯️ Share a memory</button>`
+        : `<button class="btn primary grow" data-action="open-chat-with" data-id="${pid}">💬 Message</button><button class="btn gray grow" data-action="ask-family" data-to="${pid}">❓ Ask</button><button class="btn gray" data-action="profile-more" data-id="${pid}" aria-label="More">${icon('more')}</button>`}</div>
+    ${pills(filters, tab, 'profile-filter').replace(/data-v="/g, `data-pid="${pid}" data-v="`)}
+    ${tab === 'all' ? `
+      <section class="pd">
+        <div class="row spread"><h2>Personal details</h2><button class="iconbtn" data-action="edit-person" data-id="${pid}" aria-label="Edit details">${icon('pencil')}</button></div>
+        ${detail('pin', 'Lives in', p.livesIn)}${detail('house', 'From', p.hometown)}${detail('cake', '', bdayText(p))}${detail('work', '', p.work)}
+        ${p.passed ? detail('heart', 'In loving memory', years(p)) : ''}
+        ${!p.livesIn && !p.hometown && !p.birthday && !p.work ? `<button class="link plain" data-action="edit-person" data-id="${pid}">＋ Add where ${isMe ? 'you live' : 'they live'}, hometown, birthday and work</button>` : ''}
+      </section>
+      <section class="pd">
+        <div class="row spread"><h2>About</h2><button class="iconbtn" data-action="edit-about" data-id="${pid}" aria-label="Edit about">${icon('pencil')}</button></div>
+        ${p.bio ? `<p style="white-space:pre-wrap;margin:0 0 8px">${esc(p.bio)}</p>` : `<button class="link plain" data-action="edit-about" data-id="${pid}">＋ ${isMe ? 'Tell your family about you' : `Add what you know about ${esc(p.name)}`}</button>`}
+        ${(p.likes || []).length ? `<div class="chips" style="margin-top:6px">${p.likes.map((x) => `<span class="chip">💚 ${esc(x)}</span>`).join('')}</div>` : ''}
+        ${(p.dislikes || []).length ? `<div class="chips" style="margin-top:6px">${p.dislikes.map((x) => `<span class="chip">🙅 ${esc(x)}</span>`).join('')}</div>` : ''}
+      </section>
+      <div class="row spread" style="margin:14px 0 6px"><h2 style="margin:0">Memories</h2><span class="small muted">${memories}</span></div>` : ''}
+    ${tab === 'letters'
+      ? (letters.map(letterHTML).join('') || '<div class="empty"><span class="ico">🔒</span>Letters you write or receive are kept here, private.</div>') + (isMe ? '<button class="btn block" data-action="write-letter">💌 Write a letter for later</button>' : '')
+      : posts.length ? `<div class="pgrid">${posts.map((x) => thumbHTML(x, key)).join('')}</div>`
+        : `<div class="empty"><span class="ico">🌱</span>${isMe ? 'Nothing here yet. Tap ＋ to share your first memory.' : `No memories yet. Ask ${esc(p.name)} a question to get started.`}</div>`}
+  </div>`;
+}
+
+actions['profile-filter'] = ({ pid, v }) => {
+  profileTab[pid] = v;
+  const root = $(`[data-profile="${pid}"]`);
+  if (root) { const parent = root.parentElement; viewProfile(parent, pid); hydrateMedia(parent); }
+};
+
+actions['profile-more'] = ({ id }) => {
+  const p = person(id);
+  openSheet(`${head(esc(p.name))}<div class="menu-list">
+    <button data-action="tell-story" data-pid="${id}"><span>🎬</span>Record their story (Story time)</button>
+    <button data-action="legacy" data-pid="${id}"><span>🕯️</span>Legacy interview</button>
+    <button data-action="open-book" data-id="${id}"><span>📖</span>Memory book</button>
+    <button data-action="video-to" data-id="${id}"><span>🎥</span>Send a video message</button>
+    <button data-action="edit-person" data-id="${id}"><span>✏️</span>Edit details</button>
+  </div>`);
+};
+
+// Change a profile picture or cover photo.
+actions['set-photo'] = async ({ id, kind }) => {
+  const blob = await pickPhoto(kind === 'cover' ? 1400 : 800);
+  if (!blob) return;
+  const p = person(id);
+  const mid = await storePhoto(blob);
+  if (kind === 'cover') p.coverId = mid; else p.photoId = mid;
+  await save('people', p);
+  toast(kind === 'cover' ? 'Cover photo updated 📷' : 'Profile picture updated 📷');
+  const root = $(`[data-profile="${id}"]`);
+  if (root && root.closest('.sheet')) { const parent = root.parentElement; viewProfile(parent, id); hydrateMedia(parent); }
+  else render();
+};
 
 // Shared page header: [left] Title [right]
 const pageHead = (left, title, right) =>
@@ -551,7 +910,8 @@ actions['switch-profile'] = () => {
 
 actions['use-profile'] = async ({ id }) => {
   S.meId = id; await db.setKV('meId', id);
-  S.inboxSeen = await db.getKV(`inboxSeen:${id}`, 0);
+  S.alertsSeen = await db.getKV(`alertsSeen:${id}`, 0);
+  S.chatsSeen = await db.getKV(`chatsSeen:${id}`, 0);
   closeAllSheets(); S.tab = 'home'; S.homeTab = null; await render();
   setTimeout(maybeDailyQuestion, 400);
   window.scrollTo(0, 0);
@@ -559,66 +919,8 @@ actions['use-profile'] = async ({ id }) => {
 };
 
 // ── Home: Shop · Today · For You ─────────────────────────────
-function homeTabs() {
-  const b = (t, label) => `<button class="${S.homeTab === t ? 'on' : ''}" data-action="home-tab" data-t="${t}">${label}</button>`;
-  return `<nav class="toptabs ${S.homeTab === 'foryou' ? 'on-dark' : ''}">
-    ${aaBtn()}<div class="tt-list">${b('shop', 'Shop')}${b('today', 'Today')}${b('foryou', 'For You')}</div>${hbtn('search', 'search', 'Search')}</nav>`;
-}
-actions['home-tab'] = ({ t }) => { S.homeTab = t; render(); window.scrollTo(0, 0); };
 
-async function viewHome(root) {
-  if (!S.homeTab) S.homeTab = S.posts.length ? 'foryou' : 'today';
-  if (S.homeTab === 'foryou') return viewForYou(root);
-  if (S.homeTab === 'shop') return viewShop(root);
-  return viewToday(root);
-}
 
-async function viewToday(root) {
-  const m = me();
-  const qs = await todaysQuestions(m);
-  const done = answeredIds(m.id);
-  const lastMood = S.moods.filter((x) => x.personId === m.id).sort((a, b) => b.createdAt - a.createdAt)[0];
-  const moodToday = lastMood && localDate(new Date(lastMood.createdAt)) === today();
-  const helpAlerts = S.moods.filter((x) => x.needHelp && !x.resolved && x.personId !== m.id && !x.private);
-  const myHelp = S.moods.find((x) => x.needHelp && !x.resolved && x.personId === m.id);
-  const hour = new Date().getHours();
-  const hello = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-  const trial = !owns('base') ? trialDaysLeft() : null;
-  const letters = S.letters.filter((l) => l.toId === m.id);
-
-  root.innerHTML = `${homeTabs()}
-    <h1 style="margin-top:6px">${hello}, ${esc(m.name)}</h1>
-    <p class="muted">What will your family learn about you today?</p>
-
-    ${helpAlerts.map((a) => `<div class="card alert">
-      <div class="row">${avatar(person(a.personId))}<div class="grow"><b>${esc(nameOf(a.personId))} asked for help</b><br><span class="small">${esc(a.troubling || a.note || 'They could use someone right now.')}</span></div></div>
-      <div class="row" style="margin-top:10px"><button class="btn sm primary" data-action="resolve-help" data-id="${a.id}">I'm on it 💛</button><button class="btn sm" data-action="open-chat-with" data-id="${a.personId}">Message</button></div></div>`).join('')}
-
-    ${myHelp ? `<div class="card alert"><b>You asked for help.</b> Your family can see it. <a href="#" data-action="help-resources">See support lines</a></div>` : ''}
-
-    ${trial !== null && trial <= 3 ? `<div class="card accent row"><div class="grow"><b>${trial > 0 ? `${trial} day${trial === 1 ? '' : 's'} left in your free week` : 'Your free week has ended'}</b><br><span class="small">Unlock for life — just $${CONFIG.basePrice}, one time.</span></div><button class="btn primary sm" data-action="store">Unlock</button></div>` : ''}
-
-    ${qs.map((q) => questionCard(q, done.has(q.id))).join('')}
-    ${qs.every((q) => done.has(q.id)) ? '<button class="btn block" data-action="more-question" style="margin-bottom:14px">I\'m on a roll — one more question</button>' : ''}
-
-    <div class="card">
-      <div class="row spread" style="margin-bottom:8px"><b>How are you feeling${moodToday ? ' now' : ' today'}?</b>${lastMood ? `<span class="small muted">Last: ${MOODS.find((x) => x.key === lastMood.mood)?.emoji || ''} ${timeAgo(lastMood.createdAt)}</span>` : ''}</div>
-      <div class="moods">${MOODS.map((x) => `<button class="mood" data-action="mood" data-mood="${x.key}">${x.emoji}<small>${x.short}</small></button>`).join('')}</div>
-    </div>
-
-    ${letters.length ? `<div class="card leaf row" data-action="letters-to-me" style="cursor:pointer"><span style="font-size:1.8rem">💌</span><div class="grow"><b>You have ${letters.length} letter${letters.length > 1 ? 's' : ''}</b><br><span class="small">Written just for you.</span></div><span>›</span></div>` : ''}
-
-    <div class="grid2">
-      ${tile('tell-story', '🎬', 'Tell a story', 'Like FaceTime — we recap it for you')}
-      ${tile('legacy', '🕯️', 'Legacy Interview', 'Tell your life story, a few questions at a time')}
-      ${tile('write-letter', '💌', 'Letters for later', 'Sealed until a birthday, wedding, or hard day')}
-      ${tile('ask-family', '❓', 'Ask family a question', 'Send a question you have always wondered about')}
-      ${tile('games', '🎲', 'Family games', 'How well do you know each other?')}
-      ${tile('home-tab', '🛍️', 'Marketplace', 'Budget, parenting, teens, faith & more').replace('data-action="home-tab"', 'data-action="home-tab" data-t="shop"')}
-      ${tile('books', '📖', 'Memory books', 'Everything someone shared, in one place')}
-      ${tile('home-tab', '▶️', 'Watch family videos', 'Swipe through everyone\'s memories').replace('data-action="home-tab"', 'data-action="home-tab" data-t="foryou"')}
-    </div>`;
-}
 
 function questionCard(q, isDone) {
   const cat = CATEGORIES[q.category] || CATEGORIES.family;
@@ -678,12 +980,6 @@ function feedOrder() {
   return [...S.posts].sort((a, b) => (seen(a) - seen(b)) || (b.createdAt - a.createdAt));
 }
 
-function viewForYou(root) {
-  const posts = feedOrder();
-  root.innerHTML = `${homeTabs()}
-    <div class="feed" id="feed">${posts.length ? posts.map(slideHTML).join('') : `
-      <section class="slide"><div class="slide-text" style="--tone:linear-gradient(160deg,#a8432d,#3b6446)"><div class="st-body">🌱<br>No memories yet.<br><small>Tap ＋ to record the first one.</small></div></div></section>`}</div>`;
-}
 
 const BG = ['linear-gradient(160deg,#a8432d,#6b2a1c)', 'linear-gradient(160deg,#3b6446,#1f3a28)', 'linear-gradient(160deg,#3d4db3,#1e2766)', 'linear-gradient(160deg,#8a5a1f,#4d3210)', 'linear-gradient(160deg,#7a4bb3,#3f2366)', 'linear-gradient(160deg,#1f7a6d,#0f413a)'];
 const bgFor = (post) => post.bg || BG[[...(post.personId || 'x')].reduce((a, c) => a + c.charCodeAt(0), 0) % BG.length];
@@ -726,6 +1022,7 @@ function railHTML(post) {
 
 function refreshRail(post) {
   $$(`[data-rail="${post.id}"]`).forEach((el) => { el.innerHTML = railHTML(post); hydrateMedia(el); });
+  $$(`[data-fbbar="${post.id}"]`).forEach((el) => { el.innerHTML = fbBar(post); });
 }
 
 // Autoplay the slide in view, pause the rest, count views.
@@ -810,6 +1107,7 @@ actions.comments = ({ id }) => {
     $('.sheet-head h2', sheet).textContent = `${(post.comments || []).length} comments`;
     $('#clist', sheet).innerHTML = (post.comments || []).map((c) => `<div class="cmt">${avatar(person(c.personId), 'sm')}<div><div class="small muted"><b>${esc(nameOf(c.personId))}</b> · ${timeAgo(c.at)}</div>${esc(c.text)}</div></div>`).join('')
       || '<div class="empty">Be the first to say something kind 💛</div>';
+    hydrateMedia(sheet);
   };
   paint();
   $('#cform', sheet).onsubmit = async (e) => {
@@ -1319,7 +1617,7 @@ function openTextPost() {
     const d = formData(e.target);
     if (!d.text.trim()) { toast('Write something first'); return; }
     await save('posts', { id: uid(), type: 'story', personId: d.personId, authorId: S.meId, text: d.text.trim(), bg, likes: [], comments: [], createdAt: Date.now() });
-    closeAllSheets(); S.tab = 'home'; S.homeTab = 'foryou'; await render(); toast('Posted 💛');
+    closeAllSheets(); S.tab = 'watch'; await render(); toast('Posted 💛');
   };
 }
 
@@ -1736,7 +2034,7 @@ actions['view-stories'] = ({ id }) => {
     <div class="sv-body"></div>
     <div class="sv-tap left"></div><div class="sv-tap right"></div>
     <form class="sv-reply"><input class="input" name="t" placeholder="Send ${esc(p.name)} a message…" autocomplete="off"><button class="btn primary sm">Send</button></form>
-  </div>`, { full: true, cls: 'cam-sheet', onClose: () => { clearTimeout(timer); if (S.tab === 'family' || S.tab === 'inbox') render(); } });
+  </div>`, { full: true, cls: 'cam-sheet', onClose: () => { clearTimeout(timer); if (['family', 'chats', 'home'].includes(S.tab)) render(); } });
   const show = () => {
     clearTimeout(timer);
     const post = posts[i];
@@ -1777,18 +2075,6 @@ actions['view-stories'] = ({ id }) => {
 };
 
 // ── Family tab ───────────────────────────────────────────────
-function viewFamily(root) {
-  const others = S.people.filter((p) => p.id !== S.meId);
-  root.innerHTML = `${pageHead(hbtn('add-person', 'addUser', 'Add family'), 'Family', hbtn('search', 'search', 'Search'))}
-    ${storiesRow()}
-    <div class="section-title"><h2>Family tree</h2><button class="btn sm primary" data-action="add-person">＋ Add</button></div>
-    ${treeHTML()}
-    <div class="section-title"><h2>Everyone</h2><span class="small muted">${others.length} people</span></div>
-    ${others.map((p) => `<div class="listrow">
-      <button class="row grow" data-action="person" data-id="${p.id}" style="background:none;border:0;padding:0;text-align:left;color:inherit;cursor:pointer">${avatar(p)}<span class="grow"><b>${esc(p.name)}</b><span class="small muted" style="display:block">${esc([p.relation, years(p)].filter(Boolean).join(' · '))}</span></span></button>
-      ${p.passed ? `<button class="btn sm" data-action="open-book" data-id="${p.id}">📖 Book</button>` : `<button class="btn sm" data-action="open-chat-with" data-id="${p.id}">Message</button>`}
-    </div>`).join('') || '<div class="empty">Add your family to get started 🌱</div>'}`;
-}
 
 // ── Inbox ────────────────────────────────────────────────────
 // Things that happened to me: likes and comments on my memories, answers to my questions.
@@ -1805,38 +2091,6 @@ function activityFor(pid) {
   return out.sort((a, b) => b.at - a.at);
 }
 
-function viewInbox(root) {
-  const m = me();
-  const acts = activityFor(m.id);
-  const asks = (m.askQueue || []).length;
-  const helpAlerts = S.moods.filter((x) => x.needHelp && !x.resolved && x.personId !== m.id && !x.private);
-  const letters = S.letters.filter((l) => l.toId === m.id);
-  const chats = S.chats.filter((c) => c.memberIds.includes(S.meId)).map((c) => {
-    const msgs = S.messages.filter((x) => x.chatId === c.id).sort((a, b) => a.createdAt - b.createdAt);
-    return { c, last: msgs[msgs.length - 1] };
-  }).sort((a, b) => (b.last?.createdAt || b.c.createdAt) - (a.last?.createdAt || a.c.createdAt));
-  const chatIds = new Set(chats.flatMap(({ c }) => c.memberIds));
-  const noChat = S.people.filter((p) => !p.passed && p.id !== S.meId && !chatIds.has(p.id));
-  const row = (action, data, left, title, sub, right = '') => `<button class="listrow" data-action="${action}" ${data}>${left}<div class="grow"><b>${title}</b><div class="small muted clamp1">${sub}</div></div>${right}</button>`;
-  root.innerHTML = `${pageHead(hbtn('new-chat', 'addUser', 'New chat'), 'Inbox', hbtn('search', 'search', 'Search'))}
-    ${storiesRow()}
-    ${helpAlerts.map((a) => row('open-chat-with', `data-id="${a.personId}"`, `<span class="avatar round-ico" style="--c:#b3261e;color:#fff">🆘</span>`, `${esc(nameOf(a.personId))} asked for help`, esc(a.troubling || a.note || 'Reach out now'))).join('')}
-    ${row('activity', '', `<span class="avatar round-ico" style="--c:#e8445a;color:#fff">${icon('bolt', 'fill')}</span>`, 'Activity', acts[0] ? `${esc(nameOf(acts[0].who))} ${esc(acts[0].text)}` : 'Likes, comments and answers show up here')}
-    ${asks ? row('home-tab', 'data-t="today"', `<span class="avatar round-ico" style="--c:var(--accent);color:#fff">❓</span>`, `${asks} question${asks > 1 ? 's' : ''} for you`, 'Your family wants to know') : ''}
-    ${letters.length ? row('letters-to-me', '', '<span class="avatar round-ico" style="--c:var(--leaf-soft)">💌</span>', 'Letters for you', `${letters.length} letter${letters.length > 1 ? 's' : ''} written just for you`) : ''}
-    ${chats.map(({ c, last }) => {
-      const others = c.memberIds.filter((id) => id !== S.meId);
-      const title = c.name || others.map(nameOf).join(', ');
-      const sub = last ? `${last.personId === S.meId ? 'Sent' : esc(nameOf(last.personId))}${last.mediaId ? ' a video' : `: ${esc(last.text)}`} · ${timeAgo(last.createdAt)}` : 'Say hello 👋';
-      return `<div class="listrow">
-        <button class="row grow" data-action="open-chat" data-id="${c.id}" style="background:none;border:0;padding:0;text-align:left;color:inherit;cursor:pointer;min-width:0">${others.length > 1 ? '<span class="avatar">👨‍👩‍👧‍👦</span>' : avatar(person(others[0]))}<span class="grow" style="min-width:0"><b>${esc(title)}</b><span class="small muted clamp1" style="display:block">${sub}</span></span></button>
-        <button class="iconbtn" data-action="video-msg" data-id="${c.id}" aria-label="Send a video message">${icon('camera')}</button></div>`;
-    }).join('')}
-    ${noChat.map((p) => row('open-chat-with', `data-id="${p.id}"`, avatar(p), esc(p.name), 'Start a conversation', `<span class="btn sm">Say hi</span>`)).join('')}
-    ${S.people.length < 2 ? '<div class="empty">Add family in the Family tab to start chatting 💬</div>' : ''}`;
-  S.inboxSeen = Date.now();
-  db.setKV(`inboxSeen:${m.id}`, S.inboxSeen);
-}
 
 actions.activity = () => {
   const acts = activityFor(S.meId);
@@ -1859,7 +2113,7 @@ actions['video-msg'] = async ({ id }) => {
   await db.put('media', { id: mid, blob, type: blob.type });
   await save('messages', { id: uid(), chatId: id, personId: S.meId, text: '', mediaId: mid, mediaType: 'video', createdAt: Date.now() });
   toast('Video message sent 🎥');
-  if (S.tab === 'inbox') render();
+  if (S.tab === 'chats') render();
 };
 
 // ── Chat ─────────────────────────────────────────────────────
@@ -1895,7 +2149,7 @@ actions['open-chat'] = ({ id }) => {
   const c = S.chats.find((x) => x.id === id);
   const title = c.name || c.memberIds.filter((x) => x !== S.meId).map(nameOf).join(', ');
   const sheet = openSheet(`${head(esc(title))}<div class="msgs" id="msgs"></div>
-    <form class="composer-bar"><button type="button" class="iconbtn" id="vm" aria-label="Send a video message">${icon('camera')}</button><input class="input" name="t" placeholder="Message…" autocomplete="off"><button class="btn primary">Send</button></form>`, { full: true, onClose: () => S.tab === 'inbox' && render() });
+    <form class="composer-bar"><button type="button" class="iconbtn" id="vm" aria-label="Send a video message">${icon('camera')}</button><input class="input" name="t" placeholder="Message…" autocomplete="off"><button class="btn primary">Send</button></form>`, { full: true, onClose: () => S.tab === 'chats' && render() });
   const paint = () => {
     const msgs = S.messages.filter((m) => m.chatId === id).sort((a, b) => a.createdAt - b.createdAt);
     $('#msgs', sheet).innerHTML = msgs.map((m) => `<div class="msg ${m.personId === S.meId ? 'mine' : ''}">${m.personId === S.meId ? '' : `<span class="from">${esc(nameOf(m.personId))}</span>`}${m.mediaId ? `<video controls playsinline preload="metadata" data-media="${m.mediaId}" class="msg-video"></video>` : ''}${esc(m.text)}</div>`).join('')
@@ -2269,55 +2523,6 @@ actions['profile-tab'] = ({ pid, t }) => {
   if (root) { viewProfile(root.parentElement, pid); hydrateMedia(root.parentElement); }
 };
 
-function viewProfile(root, pid) {
-  const p = person(pid);
-  const isMe = pid === S.meId;
-  const tab = profileTab[pid] || 'all';
-  const posts = profilePosts(pid, tab);
-  const key = `${pid}:${tab}`;
-  gridLists[key] = posts;
-  const likes = S.posts.filter((x) => x.personId === pid).reduce((n, x) => n + (x.likes || []).length, 0);
-  const memories = S.posts.filter((x) => x.personId === pid).length;
-  const family = Math.max(0, S.people.length - 1);
-  const tabs = [
-    ['all', 'bars', 'All memories'], ['stories', 'film', 'Videos & stories'], ['answers', 'chat', 'Answers'],
-    ...(isMe ? [['letters', 'lock', 'Private letters'], ['saved', 'bookmark', 'Saved'], ['liked', 'heart', 'Liked']] : []),
-  ];
-  const chip = (action, label, data = '') => `<button class="pchip" data-action="${action}" ${data}>${label}</button>`;
-  const letters = S.letters.filter((l) => l.fromId === pid || l.toId === pid);
-  root.innerHTML = `<div class="profile" data-profile="${pid}">
-    <div class="prof-top">
-      ${isMe ? hbtn('edit-about', 'pencil', 'Edit about me', `data-id="${pid}"`) : hbtn('close', 'back', 'Back')}
-      <span class="grow"></span>
-      ${isMe ? aaBtn() + hbtn('add-person', 'addUser', 'Add family') + hbtn('profile-menu', 'menu', 'Menu') : hbtn('edit-person', 'more', 'Edit details', `data-id="${pid}"`)}
-    </div>
-    <div class="prof-head">
-      <div class="grow" style="min-width:0">
-        <h1 class="prof-name">${esc(p.name)}${p.passed ? ' 🕯️' : ''}</h1>
-        <div class="prof-handle">${esc(handle(p))}${p.relation && !isMe ? ` · ${esc(p.relation)}` : ''}</div>
-        <div class="prof-stats">
-          <div><b>${fmtCount(family)}</b><span>Family</span></div>
-          <div><b>${fmtCount(memories)}</b><span>Memories</span></div>
-          <div><b>${fmtCount(likes)}</b><span>Likes</span></div>
-        </div>
-      </div>
-      <button class="prof-av" data-action="edit-person" data-id="${pid}" aria-label="Change photo and details">${avatar(p, 'xl')}<span class="prof-plus">${icon('plus', 'bold')}</span></button>
-    </div>
-    ${p.bio ? `<p class="prof-bio">${esc(p.bio)}</p>` : isMe ? `<button class="prof-bio-add" data-action="edit-about" data-id="${pid}">＋ Tell your family about you</button>` : ''}
-    ${(p.likes || []).length ? `<div class="chips" style="margin-bottom:10px">${p.likes.slice(0, 6).map((x) => `<span class="chip">💚 ${esc(x)}</span>`).join('')}</div>` : ''}
-    <div class="pchips">
-      ${isMe
-        ? chip('open-book', '📖 Memory book', `data-id="${pid}"`) + chip('orders', '🛍️ Your orders') + chip('legacy', '🕯️ Legacy') + chip('tell-story', '🎬 Story time')
-        : (p.passed ? chip('remember', '🕯️ Share a memory', `data-id="${pid}"`) : chip('open-chat-with', '💬 Message', `data-id="${pid}"`) + chip('ask-family', '❓ Ask a question', `data-to="${pid}"`) + chip('tell-story', '🎬 Story time', `data-pid="${pid}"`) + chip('legacy', '🕯️ Legacy', `data-pid="${pid}"`))
-          + chip('open-book', '📖 Memory book', `data-id="${pid}"`)}
-    </div>
-    <div class="ptabs">${tabs.map(([t, ic, label]) => `<button class="${t === tab ? 'on' : ''}" data-action="profile-tab" data-pid="${pid}" data-t="${t}" aria-label="${label}">${icon(ic, t === 'all' ? '' : '')}</button>`).join('')}</div>
-    ${tab === 'letters'
-      ? (letters.map(letterHTML).join('') || '<div class="empty"><span class="ico">🔒</span>Letters you write or receive are kept here, private.</div>') + (isMe ? '<button class="btn block" data-action="write-letter">💌 Write a letter for later</button>' : '')
-      : posts.length ? `<div class="pgrid">${posts.map((x) => thumbHTML(x, key)).join('')}</div>`
-        : `<div class="empty"><span class="ico">🌱</span>${isMe ? 'Nothing here yet. Tap ＋ to share your first memory.' : `No memories yet. Ask ${esc(p.name)} a question to get started.`}</div>`}
-  </div>`;
-}
 
 // Opening someone from anywhere shows their profile full-screen.
 actions.person = ({ id }) => {
@@ -2466,7 +2671,6 @@ function openStore(message = '') {
 }
 actions.store = () => openStore();
 actions.soon = () => toast('Checkout is coming soon — use a gift code for now 💛');
-actions['go-shop'] = () => { closeAllSheets(); S.tab = 'home'; S.homeTab = 'shop'; render(); window.scrollTo(0, 0); };
 actions.packs = actions['go-shop'];
 actions.pack = ({ k }) => actions.product({ id: k });
 
@@ -2478,22 +2682,6 @@ function productCard(p) {
   </button>`;
 }
 
-function viewShop(root) {
-  const cat = S.shopCat || 'all';
-  const list = PRODUCTS.filter((p) => cat === 'all' || p.cat === cat);
-  root.innerHTML = `${homeTabs()}
-    <div class="shop-hero">
-      <div><div class="small" style="opacity:.85;font-weight:700;letter-spacing:.06em">UNME SHOP</div>
-      <h1>Help for every part of family life</h1>
-      <p class="small" style="margin:0">Parenting, kids, teens, money, faith, relationships & more. Buy once, keep forever.</p></div>
-    </div>
-    ${owns('base') ? '' : `<button class="card row" data-action="store" style="width:100%;text-align:left;cursor:pointer"><span style="font-size:2rem">🌳</span><div class="grow"><b>UnMe Lifetime</b><div class="small muted">Everything you need to save your family's story</div></div><span class="pprice">$${CONFIG.basePrice}</span></button>`}
-    <div class="catrow">${SHOP_CATEGORIES.map((c) => `<button class="chip ${c.id === cat ? 'on' : ''}" data-action="shop-cat" data-c="${c.id}">${c.emoji ? `${c.emoji} ` : ''}${c.label}</button>`).join('')}</div>
-    ${cat === 'all' ? `<button class="bundle" data-action="product" data-id="bundle"><span style="font-size:2.2rem">${BUNDLE.emoji}</span><div class="grow"><b>${BUNDLE.name}</b><div class="small">${BUNDLE.tagline}</div></div><span class="pprice">${owns('bundle') || owns('*') ? '✓ Owned' : `$${BUNDLE.price}`}</span></button>` : ''}
-    <div class="pgrid2">${list.map(productCard).join('')}</div>
-    <p class="small muted center" style="margin:18px 0">Crisis and support lines are always free: <a href="#" data-action="help-resources">see them here</a>.</p>`;
-}
-actions['shop-cat'] = ({ c }) => { S.shopCat = c; render(); };
 
 const TOOL_LABEL = { budget: '💵 Open Budget Planner', flashcards: '🧮 Play Math Flashcards', agreement: '📝 Build a Phone Agreement', journal: '🙏 Open Family Journal', organizer: '🗓️ Open Family Board & Meals', games: '🎲 Play the games' };
 const TOOL_NAME = { budget: 'Budget planner & kids\' jars', flashcards: 'Math flashcard game', agreement: 'Phone agreement builder', journal: 'Gratitude & prayer journal', organizer: 'Chore board, meal planner & grocery list', games: '3 extra family games' };
@@ -2933,7 +3121,8 @@ async function handleURL() {
   devicePrefs = { ...DEFAULT_PREFS, ...(await db.getKV('prefs', {})) };
   applyPrefs();
   await handleURL();
-  S.inboxSeen = S.meId ? await db.getKV(`inboxSeen:${S.meId}`, 0) : 0;
+  S.alertsSeen = S.meId ? await db.getKV(`alertsSeen:${S.meId}`, 0) : 0;
+  S.chatsSeen = S.meId ? await db.getKV(`chatsSeen:${S.meId}`, 0) : 0;
   await render();
   setTimeout(maybeDailyQuestion, 600);
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {

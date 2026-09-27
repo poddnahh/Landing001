@@ -675,3 +675,151 @@ video.mirror { transform: scaleX(-1); }
 :root[data-big] .bundle { flex-direction: column; align-items: flex-start; }
 .avatar.photo { overflow: hidden; background: var(--surface-2); }
 .avatar.photo img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
+
+/* ── Facebook-style layer ─────────────────────────── */
+:root { --fb-blue: #1464d8; --fb-btn: #1464d8; --fb-blue-soft: #e7f0fd; --gray-btn: #e4e6eb; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --fb-blue: #4d94ff; --fb-btn: #2d6fd6; --fb-blue-soft: #1c2a40; --gray-btn: #3a3b3c; } }
+.plain { background: none; border: 0; padding: 0; color: inherit; cursor: pointer; font: inherit; text-align: inherit; }
+.link { color: var(--fb-blue); font-weight: 700; }
+.btn.gray { background: var(--gray-btn); border-color: var(--gray-btn); color: var(--ink); }
+.btn.primary { background: var(--fb-btn); border-color: var(--fb-btn); color: #fff; }
+.ic.fill-soft { fill: currentColor; fill-opacity: .18; }
+
+/* Floating pill tab bar */
+:root { --tabbar-h: calc(4.4rem + env(safe-area-inset-bottom)); }
+.tabbar { background: transparent; border: 0; height: auto; bottom: calc(8px + env(safe-area-inset-bottom)); padding: 0 10px; pointer-events: none; }
+.tabbar-inner { pointer-events: auto; background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(14px); border: 1px solid var(--line); border-radius: 26px; box-shadow: 0 6px 24px rgba(0,0,0,.14); padding: 6px; gap: 2px; }
+.tab { border-radius: 18px; padding: 6px 0 4px; color: var(--ink); }
+.tab.active { background: var(--fb-blue-soft); color: var(--fb-blue); }
+.tab .tab-l { font-size: min(.68rem, 12px); font-weight: 700; }
+.tab .ic { width: min(1.6rem, 28px); height: min(1.6rem, 28px); }
+.avatar.tabav { width: min(1.75rem, 30px); height: min(1.75rem, 30px); font-size: 1rem; }
+.tab.active .avatar.tabav { box-shadow: 0 0 0 2px var(--fb-blue); }
+.plus-btn { width: min(2.8rem, 48px); height: min(2.8rem, 48px); border-radius: 50%; box-shadow: none; background: var(--fb-btn); color: #fff; }
+body.ui-dark .tabbar { background: transparent; }
+body.ui-dark .tabbar-inner { background: rgba(20,20,20,.88); border-color: #333; }
+body.ui-dark .tab { color: #ddd; }
+body.ui-dark .tab.active { background: rgba(255,255,255,.14); color: #fff; }
+body.ui-dark .plus-btn { background: #fff; color: #000; }
+:root[data-big] .tab .tab-l { display: none; }
+
+/* Headers */
+.fbhead { position: sticky; top: 0; z-index: 6; display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--bg); padding: calc(10px + env(safe-area-inset-top)) 0 8px; }
+.fb-title { margin: 0; font-family: var(--font); font-weight: 900; font-size: min(1.75rem, 34px); letter-spacing: -.01em; }
+.logo { color: var(--fb-blue); font-weight: 900; letter-spacing: -.02em; }
+.fb-btns { display: flex; gap: 6px; align-items: center; }
+.roundbtn { position: relative; width: min(2.6rem, 44px); height: min(2.6rem, 44px); border-radius: 50%; border: 0; background: var(--gray-btn); color: var(--ink); display: grid; place-items: center; cursor: pointer; flex: none; }
+.roundbtn .ic { width: min(1.35rem, 24px); height: min(1.35rem, 24px); }
+.roundbtn .badge { top: -4px; right: -4px; }
+.roundbtn.glass { background: rgba(0,0,0,.35); color: #fff; backdrop-filter: blur(6px); }
+.roundbtn.aa, .fb-btns .iconbtn.aa { font-weight: 900; }
+.fb-btns .iconbtn.aa { width: min(2.6rem, 44px); height: min(2.6rem, 44px); border-radius: 50%; background: var(--gray-btn); min-width: 0; min-height: 0; }
+.pills { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 12px; scrollbar-width: none; }
+.pills::-webkit-scrollbar { display: none; }
+.pill { flex: none; border: 0; background: var(--gray-btn); color: var(--ink); font-weight: 800; font-size: min(1rem, 18px); padding: 9px 16px; border-radius: 999px; cursor: pointer; }
+.pill.on { background: var(--fb-blue-soft); color: var(--fb-blue); }
+
+/* Composer row + shortcuts */
+.fbcard { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 10px 12px; margin-bottom: 12px; }
+.composer-row { display: flex; align-items: center; gap: 10px; }
+.whats { flex: 1; text-align: left; background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 11px 16px; color: var(--ink-soft); font-size: 1rem; cursor: pointer; }
+.photo-ico { color: #45bd62; }
+.shortcuts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0 8px; }
+.shortcuts button { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 6px; display: flex; flex-direction: column; align-items: center; gap: 4px; font-weight: 700; font-size: .9rem; cursor: pointer; color: var(--ink); }
+.shortcuts span { font-size: 1.5rem; }
+:root[data-big] .shortcuts { grid-template-columns: repeat(2, 1fr); }
+
+/* Tall story cards */
+.scards { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 14px; scrollbar-width: none; }
+.scards::-webkit-scrollbar { display: none; }
+.scard { position: relative; flex: none; width: 7.2rem; height: 12rem; border-radius: 16px; overflow: hidden; border: 1px solid var(--line); background: #333; padding: 0; cursor: pointer; color: #fff; text-align: left; }
+.sc-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: var(--tone, #444); }
+.sc-text { display: grid; place-items: center; padding: 12px 8px 36px; font-family: var(--serif); font-weight: 600; font-size: .9rem; line-height: 1.25; text-align: center; }
+.scard::after { content: ''; position: absolute; inset: 0; background: linear-gradient(transparent 55%, rgba(0,0,0,.6)); pointer-events: none; }
+.sc-av { position: absolute; top: 8px; left: 8px; z-index: 1; border-radius: 50%; padding: 2px; background: #fff; }
+.sc-av.ring { background: var(--fb-blue); }
+.sc-name { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 1; font-size: .92rem; line-height: 1.15; text-shadow: 0 1px 3px rgba(0,0,0,.7); }
+.sc-badge { position: absolute; top: 8px; right: 6px; z-index: 1; background: #fff; color: #111; font-size: .68rem; font-weight: 800; padding: 2px 6px; border-radius: 6px; }
+.scard.create { background: var(--surface); color: var(--ink); }
+.scard.create::after { display: none; }
+.sc-me { position: absolute; inset: 0 0 34% 0; display: grid; place-items: center; background: var(--surface-2); overflow: hidden; }
+.sc-me .avatar { width: 100%; height: 100%; border-radius: 0; font-size: 3.2rem; }
+.sc-me .avatar.photo img { border-radius: 0; }
+.sc-plus { position: absolute; left: 50%; top: 66%; transform: translate(-50%, -50%); width: 2.4rem; height: 2.4rem; border-radius: 50%; background: var(--fb-btn); color: #fff; display: grid; place-items: center; border: 3px solid var(--surface); z-index: 1; }
+.sc-plus .ic { width: 1.2rem; height: 1.2rem; }
+.scard.create b { position: absolute; left: 0; right: 0; bottom: 10px; text-align: center; font-size: .92rem; line-height: 1.15; }
+
+/* Post cards */
+.fbpost { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; margin-bottom: 12px; overflow: hidden; }
+.fbpost header { display: flex; gap: 10px; align-items: center; padding: 12px 12px 6px; }
+.fb-q { padding: 0 14px 4px; font-family: var(--serif); font-style: italic; color: var(--ink-soft); }
+.fb-title2 { padding: 0 14px; margin: 2px 0 4px; }
+.fb-text { padding: 0 14px 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.fb-color { background: var(--tone); color: #fff; min-height: 14rem; display: grid; place-items: center; padding: 24px; text-align: center; font-family: var(--serif); font-size: 1.4rem; font-weight: 600; white-space: pre-wrap; }
+.fb-media video, .fb-media img { width: 100%; max-height: 75vh; object-fit: contain; background: #000; display: block; }
+.fb-media audio { width: calc(100% - 28px); margin: 6px 14px 10px; }
+.fbpost .recap { margin: 8px 12px; }
+.fb-counts { display: flex; justify-content: space-between; align-items: center; padding: 8px 14px 6px; font-size: .9rem; color: var(--ink-soft); min-height: 1.6rem; }
+.fb-actions { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); margin: 0 10px; }
+.fb-actions button { background: none; border: 0; padding: 10px 4px; display: flex; gap: 6px; align-items: center; justify-content: center; font-weight: 700; color: var(--ink-soft); cursor: pointer; font-size: .95rem; border-radius: 8px; }
+.fb-actions button .ic { width: 1.25rem; height: 1.25rem; }
+.fb-actions button.liked { color: #e8264a; }
+.fb-actions button:active { background: var(--surface-2); }
+
+/* Alerts */
+.al-h { font-family: var(--font); font-weight: 900; margin: 10px 0 4px; font-size: 1.25rem; }
+.alert-row { display: flex; gap: 12px; align-items: center; width: calc(100% + 32px); margin: 0 -16px; padding: 10px 16px; background: none; border: 0; text-align: left; color: var(--ink); cursor: pointer; font-size: 1rem; line-height: 1.35; }
+.alert-row.unread { background: var(--fb-blue-soft); }
+.al-av { position: relative; flex: none; }
+.al-av .avatar.lg { width: 3.6rem; height: 3.6rem; font-size: 1.8rem; }
+.al-badge { position: absolute; right: -4px; bottom: -4px; width: 1.7rem; height: 1.7rem; border-radius: 50%; color: #fff; display: grid; place-items: center; border: 2px solid var(--bg); }
+.al-badge .ic { width: 1rem; height: 1rem; }
+.listrow.unread b { color: var(--fb-blue); }
+
+/* Family list */
+.friend { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.friend .avatar.xl { width: 5rem; height: 5rem; font-size: 2.6rem; }
+
+/* Marketplace */
+.newrow { display: flex; gap: 12px; align-items: center; width: calc(100% + 32px); margin: 0 -16px 2px; padding: 10px 16px; background: var(--fb-blue-soft); border: 0; text-align: left; color: var(--ink); cursor: pointer; font-size: 1rem; line-height: 1.35; }
+.mgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 0 -16px; }
+.mtile { background: none; border: 0; padding: 0 0 10px; text-align: left; color: var(--ink); cursor: pointer; }
+.mimg { position: relative; display: grid; place-items: center; aspect-ratio: 1; background: linear-gradient(150deg, var(--pc), color-mix(in srgb, var(--pc) 50%, #000)); }
+.mimg span { font-size: 3.6rem; filter: drop-shadow(0 4px 8px rgba(0,0,0,.25)); }
+.mimg em { position: absolute; left: 8px; top: 8px; font-style: normal; background: #fff; color: #111; font-size: .78rem; font-weight: 800; padding: 3px 8px; border-radius: 6px; }
+.mcap { display: block; padding: 8px 8px 0; font-size: 1rem; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:root[data-big] .mgrid { grid-template-columns: 1fr; }
+
+/* Profile */
+.fbprofile { padding-top: 0; }
+.cover { position: relative; height: 13rem; margin: 0 -16px; background: var(--tone, #666); overflow: hidden; }
+.cover > img { width: 100%; height: 100%; object-fit: cover; }
+.cover-top { position: absolute; top: calc(10px + env(safe-area-inset-top)); left: 12px; right: 12px; display: flex; gap: 8px; align-items: center; }
+.cover-cam { position: absolute; right: 12px; bottom: 12px; width: 2.4rem; height: 2.4rem; border-radius: 8px; border: 0; background: rgba(255,255,255,.92); color: #111; display: grid; place-items: center; cursor: pointer; }
+.cover-cam .ic { width: 1.3rem; height: 1.3rem; }
+.pf-avwrap { display: flex; justify-content: center; margin-top: -5.2rem; position: relative; z-index: 1; }
+.pf-avwrap > button { position: relative; }
+.avatar.huge { width: 10rem; height: 10rem; font-size: 5rem; border: 5px solid var(--bg); }
+.pf-cam { position: absolute; right: 8px; bottom: 8px; width: 2.4rem; height: 2.4rem; border-radius: 50%; background: var(--gray-btn); color: var(--ink); display: grid; place-items: center; border: 3px solid var(--bg); }
+.pf-cam .ic { width: 1.2rem; height: 1.2rem; }
+.pf-name { text-align: center; font-family: var(--font); font-weight: 900; font-size: min(2rem, 38px); margin: 8px 0 4px; overflow-wrap: break-word; }
+.pf-stats { text-align: center; font-size: 1.05rem; margin-bottom: 8px; }
+.pf-info { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px 6px; font-weight: 700; margin-bottom: 8px; }
+.pf-info .ic { width: 1.1rem; height: 1.1rem; display: inline-block; vertical-align: -3px; margin-right: 3px; }
+.pf-info .dot { color: var(--ink-soft); }
+.pf-fam { display: flex; align-items: center; gap: 8px; margin: 4px 0 12px; font-weight: 600; }
+.stack-av { display: flex; }
+.stack-av .avatar { border: 2px solid var(--bg); margin-right: -10px; }
+.stack-av .avatar:last-child { margin-right: 0; }
+.pf-btns { display: flex; gap: 8px; margin-bottom: 14px; }
+.pf-btns .btn { font-size: 1.02rem; border-radius: 10px; }
+.pd { border-top: 1px solid var(--line); padding: 12px 0 6px; }
+.pd h2 { font-family: var(--font); font-weight: 900; margin: 0 0 8px; font-size: 1.3rem; }
+.pd-row { display: flex; gap: 14px; align-items: center; padding: 8px 0; font-size: 1.08rem; }
+.pd-row .ic { width: 1.6rem; height: 1.6rem; color: var(--ink-soft); }
+.fbprofile .pgrid { margin-top: 0; }
+.pf-avwrap { pointer-events: none; } .pf-avwrap > button { pointer-events: auto; } .cover-cam { z-index: 2; }
+/* One heading style everywhere (bold sans, like Facebook). The storybook serif stays for questions and stories. */
+h1, h2, h3, .sheet-head h2 { font-family: var(--font); font-weight: 800; letter-spacing: -.01em; }
+.whats { border-radius: 22px; line-height: 1.3; }
+.scard { width: min(7.2rem, 128px); height: min(12rem, 214px); }
