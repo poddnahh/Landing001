@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Heartroots — Know Your Family</title>
+  <meta name="description" content="One question a day. A lifetime of stories. Heartroots helps families share who they really are — with videos, voice memories, a family tree and memory books that last forever. $10, once.">
+  <meta property="og:title" content="Heartroots — Know your family before it's too late">
+  <meta property="og:description" content="One question a day. Videos, voice memories, a family tree and memory books that last forever. $10 once.">
+  <meta property="og:image" content="app/icon-512.png">
+  <meta name="theme-color" content="#c2553d">
+  <link rel="icon" href="app/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#fbf6f0; --surface:#fff; --ink:#2b2220; --soft:#6f615b; --line:#eadfd3; --accent:#c2553d; --accent-soft:#fbe3da; --leaf:#4f7d5c; --leaf-soft:#e1eee3; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#181312; --surface:#221b19; --ink:#f3e9e2; --soft:#b5a59c; --line:#3a2f2b; --accent:#e27358; --accent-soft:#432720; --leaf:#86b995; --leaf-soft:#22342a; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font-family: Inter, system-ui, sans-serif; line-height: 1.6; }
+    h1, h2, h3 { font-family: Fraunces, Georgia, serif; line-height: 1.15; margin: 0 0 .4em; }
+    .wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
+    nav { display: flex; justify-content: space-between; align-items: center; padding: 18px 0; }
+    .logo { font-family: Fraunces, serif; font-weight: 700; font-size: 1.4rem; color: var(--accent); text-decoration: none; display: flex; align-items: center; gap: 8px; }
+    .logo img { width: 32px; height: 32px; border-radius: 8px; }
+    .btn { display: inline-block; padding: 14px 26px; border-radius: 999px; font-weight: 700; text-decoration: none; border: 1px solid var(--line); color: var(--ink); background: var(--surface); }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .hero { display: grid; grid-template-columns: 1.1fr .9fr; gap: 40px; align-items: center; padding: 40px 0 70px; }
+    .hero h1 { font-size: clamp(2.2rem, 5vw, 3.6rem); }
+    .hero p.lead { font-size: 1.2rem; color: var(--soft); max-width: 34em; }
+    .cta { display: flex; gap: 12px; flex-wrap: wrap; margin: 24px 0 10px; }
+    .note { font-size: .9rem; color: var(--soft); }
+    .phone { background: var(--surface); border: 1px solid var(--line); border-radius: 36px; padding: 22px; box-shadow: 0 20px 60px rgba(60,40,30,.15); max-width: 340px; margin: 0 auto; }
+    .phone .q { background: var(--accent-soft); border-radius: 18px; padding: 18px; font-family: Fraunces, serif; font-size: 1.2rem; margin: 10px 0; }
+    .phone .a { background: var(--bg); border-radius: 18px; padding: 14px; font-size: .95rem; margin-top: 10px; }
+    .chip { display: inline-block; font-size: .75rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--leaf-soft); color: var(--leaf); }
+    section { padding: 60px 0; }
+    .center { text-align: center; }
+    .story { background: var(--surface); border: 1px solid var(--line); border-radius: 24px; padding: 32px; max-width: 760px; margin: 0 auto; font-size: 1.1rem; }
+    .story p { font-family: Fraunces, Georgia, serif; font-size: 1.25rem; }
+    .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 30px; }
+    .f { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 22px; }
+    .f .i { font-size: 2rem; }
+    .f p { color: var(--soft); margin: 0; font-size: .95rem; }
+    .pricing { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; margin-top: 30px; align-items: start; }
+    .plan { background: var(--surface); border: 2px solid var(--accent); border-radius: 24px; padding: 30px; }
+    .price { font-family: Fraunces, serif; font-size: 3.4rem; font-weight: 700; }
+    .plan ul { padding-left: 20px; }
+    .addons { display: grid; gap: 10px; }
+    .addon { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 16px 18px; display: flex; gap: 14px; align-items: center; }
+    .addon .i { font-size: 1.6rem; }
+    .addon b { display: block; }
+    .addon span { color: var(--soft); font-size: .9rem; }
+    .addon .p { margin-left: auto; font-weight: 700; white-space: nowrap; }
+    .share { background: var(--leaf-soft); border-radius: 24px; padding: 36px; text-align: center; }
+    details { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px 20px; margin-bottom: 10px; }
+    summary { font-weight: 700; cursor: pointer; }
+    footer { padding: 40px 0 60px; text-align: center; color: var(--soft); font-size: .9rem; }
+    @media (max-width: 800px) { .hero, .pricing { grid-template-columns: 1fr; } .features { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 520px) { .features { grid-template-columns: 1fr; } .hero { padding-top: 10px; } .story, .plan, .share { padding: 22px; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav>
+      <a class="logo" href="./"><img src="app/icon.svg" alt="">Heartroots</a>
+      <a class="btn" href="app/">Open app</a>
+    </nav>
+
+    <div class="hero">
+      <div>
+        <span class="chip">Family stories · Memory books · Family tree</span>
+        <h1>Know your family — really know them — while you still can.</h1>
+        <p class="lead">Every time you open Heartroots, you answer one or two questions your family has always wanted to ask. Record videos, leave your voice, write letters for future birthdays. It all becomes a memory book your family can go back to forever.</p>
+        <div class="cta">
+          <a class="btn primary" href="app/">Start free for 7 days</a>
+          <a class="btn" href="#pricing">$10 once — no subscription</a>
+        </div>
+        <div class="note">Works on iPhone, Android, tablets & computers. Install it right from your browser.</div>
+      </div>
+      <div class="phone" aria-hidden="true">
+        <div style="display:flex;justify-content:space-between;align-items:center"><b style="color:var(--accent);font-family:Fraunces,serif">🌳 Heartroots</b><span>👴</span></div>
+        <div class="chip" style="margin-top:14px">💌 Sarah asked you</div>
+        <div class="q">What were you like at my age?</div>
+        <div class="a">🎙️ <b>Voice memory · 3:12</b><br><span style="color:var(--soft)">“Oh, I was a handful. The summer I turned 30, your mother and I packed up the truck and…”</span></div>
+        <div class="a">❤️ 6 &nbsp; 💬 “I never knew this, Dad.”</div>
+      </div>
+    </div>
+  </div>
+
+  <section>
+    <div class="wrap">
+      <div class="story">
+        <p>“My dad was diagnosed with stage 4 cancer, and I realized there's so much about him I never knew. I wanted a place where he could tell me all of it — and where I could go back, always, and hear him.”</p>
+        <div style="color:var(--soft)">— Why Heartroots was built</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2 class="center">Everything your family wishes it knew</h2>
+      <div class="features">
+        <div class="f"><div class="i">💬</div><h3>1–2 questions a day</h3><p>Over 80 thoughtful questions — childhood, love, regrets, favorite recipes, life advice. Family can send their own questions too.</p></div>
+        <div class="f"><div class="i">🕯️</div><h3>Legacy Interview</h3><p>A gentle guided interview to capture a whole life story — perfect for parents and grandparents, especially during illness.</p></div>
+        <div class="f"><div class="i">🎥</div><h3>Short videos & voice</h3><p>Record a 60-second video or a voice memory. Their laugh, their advice, their "I love you" — saved forever.</p></div>
+        <div class="f"><div class="i">🌤️</div><h3>How I feel & "I need help"</h3><p>Share how you're doing, what's troubling you, and quietly let family know when you need them.</p></div>
+        <div class="f"><div class="i">🌳</div><h3>Family tree & circle chat</h3><p>Build your tree, chat one-on-one or in groups, like and comment on each other's memories.</p></div>
+        <div class="f"><div class="i">📖</div><h3>Memory books forever</h3><p>Everything someone shared, in one beautiful book you can save and keep — even after they're gone.</p></div>
+        <div class="f"><div class="i">💌</div><h3>Letters for later</h3><p>Write letters sealed until a graduation, a wedding, or "when you miss me".</p></div>
+        <div class="f"><div class="i">🎲</div><h3>Family games</h3><p>"How well do you know Grandpa?" quizzes built from real answers, Would You Rather, trivia and more.</p></div>
+        <div class="f"><div class="i">🔒</div><h3>Private by design</h3><p>Your memories stay on your device. No ads. No selling your data. Ever.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="pricing">
+    <div class="wrap">
+      <h2 class="center">Simple, one-time pricing</h2>
+      <p class="center" style="color:var(--soft)">Pay once. Keep it forever. Your saved memories are always yours to view and export.</p>
+      <div class="pricing">
+        <div class="plan">
+          <div style="font-weight:700;color:var(--accent)">Heartroots Lifetime</div>
+          <div class="price">$10</div>
+          <div style="color:var(--soft)">One time · 7-day free trial</div>
+          <ul>
+            <li>Daily questions, Legacy Interview & family questions</li>
+            <li>Unlimited videos, voice memories, stories & photos</li>
+            <li>Family tree, group & one-on-one chat</li>
+            <li>Feelings check-ins & "I need help" alerts</li>
+            <li>Letters for later & downloadable memory books</li>
+            <li>Profiles for everyone on a shared phone or tablet</li>
+          </ul>
+          <a class="btn primary" style="width:100%;text-align:center" id="buy-base" href="app/">Start free trial</a>
+        </div>
+        <div class="addons">
+          <div class="addon"><span class="i">🧑‍🍼</span><div><b>Digital Parent Help</b><span>Check-in scripts, teen talk & screen-time tools</span></div><span class="p">$4.99</span></div>
+          <div class="addon"><span class="i">🧒</span><div><b>Children Help</b><span>Kid questions, feelings wheel, "Ask a grown-up"</span></div><span class="p">$4.99</span></div>
+          <div class="addon"><span class="i">🏡</span><div><b>Family Help</b><span>Reconnect, repair, and care through illness & grief</span></div><span class="p">$4.99</span></div>
+          <div class="addon"><span class="i">🎲</span><div><b>Family Game Night</b><span>Trivia, Two Truths & a Lie, Story Chain</span></div><span class="p">$2.99</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="share">
+        <h2>Bring your people back together</h2>
+        <p style="max-width:36em;margin:0 auto 20px">Heartroots is better with everyone in it. Share it with the friend who keeps saying "I should really ask Grandma about that."</p>
+        <a class="btn primary" href="#" id="share-btn">Share Heartroots</a>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap" style="max-width:760px">
+      <h2 class="center">Questions</h2>
+      <details><summary>Is it really just $10?</summary><p>Yes. One payment, lifetime access. Optional add-on packs are one-time too. No subscriptions.</p></details>
+      <details><summary>My parent isn't good with technology. Can I record for them?</summary><p>Absolutely. Add them to your tree, then sit together and record their answers on your phone — pick their name under "Whose memory is this?" and it goes into their memory book.</p></details>
+      <details><summary>What happens to the memories if I stop paying or lose my phone?</summary><p>You never lose access to what you've saved — viewing and exporting memory books is always free. Use "Backup & share family file" regularly to keep a copy and share it with family.</p></details>
+      <details><summary>How does my family see what I share?</summary><p>Everyone can use one shared device with their own profile, or you can send the family file to relatives who import it on their own phones. Real-time cloud sync is on the way.</p></details>
+    </div>
+  </section>
+
+  <footer>
+    <div>🌳 Heartroots · Made with love for every family</div>
+  </footer>
+
+  <script type="module">
+    import { CONFIG } from './app/js/config.js';
+    if (CONFIG.checkoutLinks.base) {
+      const b = document.getElementById('buy-base');
+      b.href = CONFIG.checkoutLinks.base;
+      b.textContent = `Buy now — $${CONFIG.basePrice}`;
+    }
+    const ref = new URLSearchParams(location.search).get('ref');
+    if (ref) for (const a of document.querySelectorAll('a[href^="app/"]')) a.href = `app/?ref=${encodeURIComponent(ref)}`;
+    document.getElementById('share-btn').onclick = async (e) => {
+      e.preventDefault();
+      const url = location.origin + location.pathname;
+      const text = 'Save your family\'s stories before they\'re lost. Heartroots — one question a day.';
+      if (navigator.share) { try { await navigator.share({ title: 'Heartroots', text, url }); } catch {} return; }
+      try { await navigator.clipboard.writeText(`${text} ${url}`); e.target.textContent = 'Link copied ✓'; } catch { prompt('Copy this link:', url); }
+    };
+  </script>
+</body>
+</html>
