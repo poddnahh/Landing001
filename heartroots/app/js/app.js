@@ -220,9 +220,104 @@ document.addEventListener('click', (e) => {
 actions.close = () => closeSheet();
 actions.tab = ({ tab }) => { S.tab = tab; render(); window.scrollTo(0, 0); };
 
+// ── Display & reading preferences ────────────────────────────
+// Saved per person (Dad can have huge text while the kids keep normal),
+// with a device-wide copy used on the welcome screen and for new profiles.
+const TEXT_SIZES = [
+  { scale: 1, label: 'Normal' }, { scale: 1.15, label: 'Large' },
+  { scale: 1.3, label: 'Larger' }, { scale: 1.5, label: 'Largest' },
+];
+const DEFAULT_PREFS = { scale: 1, font: 'standard', bold: false, contrast: 'normal', motion: 'auto', readAloud: true };
+let devicePrefs = { ...DEFAULT_PREFS };
+const prefs = () => ({ ...DEFAULT_PREFS, ...devicePrefs, ...(me()?.prefs || {}) });
+
+function applyPrefs(p = prefs()) {
+  const root = document.documentElement;
+  root.style.setProperty('--scale', p.scale);
+  root.dataset.font = p.font;
+  root.dataset.contrast = p.contrast;
+  root.dataset.motion = p.motion;
+  root.toggleAttribute('data-bold', !!p.bold);
+  root.toggleAttribute('data-big', p.scale >= 1.3);
+}
+
+async function savePrefs(patch) {
+  const next = { ...prefs(), ...patch };
+  devicePrefs = next;
+  await db.setKV('prefs', next);
+  const m = me();
+  if (m) { m.prefs = next; await save('people', m); }
+  applyPrefs(next);
+}
+
+// Read text out loud — helps young kids and anyone who finds reading tiring.
+const canSpeak = 'speechSynthesis' in window;
+function speak(text) {
+  if (!canSpeak) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.rate = 0.9;
+  speechSynthesis.speak(u);
+}
+const speakBtn = (text) => (canSpeak && prefs().readAloud
+  ? `<button class="speak" data-action="speak" data-text="${esc(text)}" aria-label="Read out loud">🔊</button>` : '');
+actions.speak = ({ text }) => speak(text);
+
+actions.display = () => {
+  const p = prefs();
+  const sheet = openSheet(`${head('Aa  Text & display')}
+    <p class="muted">Make ${CONFIG.appName} comfortable to read${me() ? ` for <b>${esc(me().name)}</b>` : ''}. Changes show right away.</p>
+    <div class="field"><span>Quick setup</span>
+      <button class="preset" data-preset="older"><span class="ico">👓</span><span><b>Easy on the eyes</b><br><span class="small muted">Largest text, easy-read letters, bold and extra contrast</span></span></button>
+      <button class="preset" data-preset="kids"><span class="ico">🧒</span><span><b>Kid friendly</b><br><span class="small muted">Bigger text, easy-read letters and read-aloud buttons</span></span></button>
+      <button class="preset" data-preset="standard"><span class="ico">↩️</span><span><b>Standard</b><br><span class="small muted">Back to the normal look</span></span></button>
+    </div>
+    <div class="field"><span>Text size</span>
+      <div class="seg" id="sizes">${TEXT_SIZES.map((t, i) => `<button data-scale="${t.scale}" class="${p.scale === t.scale ? 'on' : ''}"><span class="a" style="font-size:${1 + i * 0.3}rem">A</span>${t.label}</button>`).join('')}</div>
+    </div>
+    <div class="preview"><b>What were you like at my age?</b><br><span class="muted">This is how questions and stories will look.</span></div>
+    <div class="field"><span>Letters</span>
+      <div class="seg" style="grid-template-columns:1fr 1fr" id="fonts">
+        <button data-font="standard" class="${p.font === 'standard' ? 'on' : ''}" style="font-family:Inter,system-ui">Standard</button>
+        <button data-font="easy" class="${p.font === 'easy' ? 'on' : ''}" style="font-family:'Atkinson Hyperlegible',system-ui">Easy-read</button>
+      </div>
+      <span class="small muted" style="font-weight:400">Easy-read letters were designed for people with low vision — each letter is easy to tell apart.</span>
+    </div>
+    <div class="card" style="padding:4px 16px">
+      <label class="switch"><input type="checkbox" data-pref="bold" ${p.bold ? 'checked' : ''}><span class="grow"><b>Bold text</b><br><span class="small muted">Thicker, darker letters</span></span></label>
+      <label class="switch"><input type="checkbox" data-pref="contrast" ${p.contrast === 'high' ? 'checked' : ''}><span class="grow"><b>Extra contrast</b><br><span class="small muted">Stronger colors and borders</span></span></label>
+      ${canSpeak ? `<label class="switch"><input type="checkbox" data-pref="readAloud" ${p.readAloud ? 'checked' : ''}><span class="grow"><b>Read-aloud buttons 🔊</b><br><span class="small muted">Tap to hear questions spoken out loud</span></span></label>` : ''}
+      <label class="switch"><input type="checkbox" data-pref="motion" ${p.motion === 'reduce' ? 'checked' : ''}><span class="grow"><b>Less motion</b><br><span class="small muted">Turn off sliding animations</span></span></label>
+    </div>
+    <button class="btn primary block" data-action="close" style="margin-top:8px">Done</button>`, { onClose: () => render() });
+  const sync = () => {
+    const q = prefs();
+    $$('#sizes button', sheet).forEach((b) => b.classList.toggle('on', +b.dataset.scale === q.scale));
+    $$('#fonts button', sheet).forEach((b) => b.classList.toggle('on', b.dataset.font === q.font));
+    $('[data-pref=bold]', sheet).checked = q.bold;
+    $('[data-pref=contrast]', sheet).checked = q.contrast === 'high';
+    $('[data-pref=motion]', sheet).checked = q.motion === 'reduce';
+    const ra = $('[data-pref=readAloud]', sheet); if (ra) ra.checked = q.readAloud;
+  };
+  $$('#sizes button', sheet).forEach((b) => b.onclick = async () => { await savePrefs({ scale: +b.dataset.scale }); sync(); });
+  $$('#fonts button', sheet).forEach((b) => b.onclick = async () => { await savePrefs({ font: b.dataset.font }); sync(); });
+  $$('[data-pref]', sheet).forEach((inp) => inp.onchange = async () => {
+    const k = inp.dataset.pref;
+    const v = k === 'contrast' ? (inp.checked ? 'high' : 'normal') : k === 'motion' ? (inp.checked ? 'reduce' : 'auto') : inp.checked;
+    await savePrefs({ [k]: v });
+  });
+  const PRESETS = {
+    older: { scale: 1.5, font: 'easy', bold: true, contrast: 'high', readAloud: true },
+    kids: { scale: 1.3, font: 'easy', bold: false, contrast: 'normal', readAloud: true },
+    standard: { ...DEFAULT_PREFS },
+  };
+  $$('[data-preset]', sheet).forEach((b) => b.onclick = async () => { await savePrefs(PRESETS[b.dataset.preset]); sync(); toast('Display updated ✓'); });
+};
+
 // ── Rendering ────────────────────────────────────────────────
 async function render() {
   const app = $('#app');
+  applyPrefs();
   if (!me()) { renderWelcome(app); return; }
   const views = { home: viewHome, circle: viewCircle, tree: viewTree, me: viewMe };
   // Build the view off-screen first so the page never flashes blank while data loads.
@@ -233,8 +328,9 @@ async function render() {
   if (tab !== S.tab) return; // a newer render already took over
   app.innerHTML = `
     <div class="topbar">
-      <div class="brand">🌳 ${esc(CONFIG.appName)}</div>
+      <div class="brand">🌳 <span class="word">${esc(CONFIG.appName)}</span></div>
       <div class="row">
+        <button class="iconbtn" data-action="display" aria-label="Text size and display" style="font-weight:800;font-size:1.1rem">Aa</button>
         <button class="iconbtn" data-action="share" aria-label="Share">📤</button>
         <button class="iconbtn" data-action="switch-profile" aria-label="Switch profile">${avatar(me(), 'sm')}</button>
       </div>
@@ -260,6 +356,7 @@ function renderWelcome(app) {
   $('.tabbar')?.remove();
   app.innerHTML = `
     <div class="welcome stack">
+      <div style="text-align:right"><button class="btn sm" data-action="display">Aa  Make text bigger</button></div>
       <div class="hero">🌳</div>
       <h1>${esc(CONFIG.appName)}</h1>
       <p class="center muted">The place your family tells its story — so no one ever wonders<br>“I wish I had known them better.”</p>
@@ -311,7 +408,7 @@ actions['new-profile'] = ({ first }) => {
     if (!d.name.trim()) return;
     const p = {
       id: uid(), name: d.name.trim(), emoji: d.emoji, color: d.color, birthYear: d.birthYear, hometown: d.hometown,
-      relation: first ? 'Me' : '', profile: true, likes: [], dislikes: [], parentIds: [], askQueue: [], createdAt: Date.now(),
+      relation: first ? 'Me' : '', profile: true, prefs: { ...devicePrefs }, likes: [], dislikes: [], parentIds: [], askQueue: [], createdAt: Date.now(),
     };
     await save('people', p);
     if (first || !S.meId) {
@@ -321,6 +418,7 @@ actions['new-profile'] = ({ first }) => {
     closeAllSheets();
     S.tab = 'home';
     await render();
+    window.scrollTo(0, 0);
     toast(`Welcome, ${p.name} 💛`);
   };
 };
@@ -336,6 +434,7 @@ actions['switch-profile'] = () => {
 actions['use-profile'] = async ({ id }) => {
   S.meId = id; await db.setKV('meId', id);
   closeAllSheets(); S.tab = 'home'; await render();
+  window.scrollTo(0, 0);
   toast(`Hi ${nameOf(id)} 👋`);
 };
 
@@ -370,7 +469,7 @@ async function viewHome(root) {
       const cat = CATEGORIES[q.category] || CATEGORIES.family;
       return `<div class="card qcard ${isDone ? 'done' : ''}">
         <div class="row spread"><span class="chip accent">${cat.emoji} ${q.fromId ? `${esc(nameOf(q.fromId))} asked you` : 'Question of the day'}</span>${isDone ? '<span class="chip leaf">✓ Answered</span>' : ''}</div>
-        <div class="qtext">${esc(q.text)}</div>
+        <div class="row" style="align-items:flex-start"><div class="qtext grow">${esc(q.text)}</div>${speakBtn(q.text)}</div>
         ${isDone ? '' : `<div class="row"><button class="btn primary grow" data-action="answer" data-qid="${q.id}">Answer</button>
           <button class="btn" data-action="answer" data-qid="${q.id}" data-rec="video" aria-label="Answer with video">🎥</button>
           <button class="btn" data-action="answer" data-qid="${q.id}" data-rec="audio" aria-label="Answer with voice">🎙️</button>
@@ -381,7 +480,7 @@ async function viewHome(root) {
 
     <div class="card">
       <div class="row spread" style="margin-bottom:8px"><b>How are you feeling${moodToday ? ' now' : ' today'}?</b>${lastMood ? `<span class="small muted">Last: ${MOODS.find((x) => x.key === lastMood.mood)?.emoji || ''} ${timeAgo(lastMood.createdAt)}</span>` : ''}</div>
-      <div class="moods">${MOODS.map((x) => `<button class="mood" data-action="mood" data-mood="${x.key}">${x.emoji}<small>${x.label.split(' ')[0]}</small></button>`).join('')}</div>
+      <div class="moods">${MOODS.map((x) => `<button class="mood" data-action="mood" data-mood="${x.key}">${x.emoji}<small>${x.short}</small></button>`).join('')}</div>
     </div>
 
     ${letters.length ? `<div class="card leaf row" data-action="letters-to-me" style="cursor:pointer"><span style="font-size:1.8rem">💌</span><div class="grow"><b>You have ${letters.length} letter${letters.length > 1 ? 's' : ''}</b><br><span class="small">Written just for you.</span></div><span>›</span></div>` : ''}
@@ -537,7 +636,7 @@ function openComposer({ type, question, rec, personId = S.meId, prefill = '', ti
   let media = null; // { blob, kind }
   const sheet = openSheet(`${head(titles[type])}
     <form class="stack" id="composer">
-      ${question ? `<div class="card accent"><div class="qtext" style="font-family:var(--serif);font-size:1.15rem">${esc(question.text)}</div></div>` : ''}
+      ${question ? `<div class="card accent row" style="align-items:flex-start"><div class="qtext grow" style="font-family:var(--serif);font-size:1.15rem">${esc(question.text)}</div>${speakBtn(question.text)}</div>` : ''}
       ${type === 'story' || type === 'photo' || type === 'video' || type === 'voice' ? `<input class="input" name="title" placeholder="${type === 'story' ? 'Story title (e.g. The summer of 1975)' : 'Give it a title (optional)'}" value="${esc(title)}">` : ''}
       <textarea class="input" name="text" placeholder="${type === 'answer' ? 'Take your time. Tell it like you would at the kitchen table…' : type === 'story' ? 'Once upon a time…' : 'Add a few words (optional)'}">${esc(prefill)}</textarea>
       <div id="media-slot"></div>
@@ -1095,7 +1194,7 @@ actions.legacy = ({ pid }) => {
     <div class="progress"><i style="width:${(n / LEGACY_INTERVIEW.length) * 100}%"></i></div>
     <p class="small muted">${n} of ${LEGACY_INTERVIEW.length} answered</p>
     ${LEGACY_INTERVIEW.map((q, i) => `<div class="card ${done.has(q.id) ? 'soft' : ''}">
-      <div class="small muted">Question ${i + 1}</div><p style="font-family:var(--serif);font-size:1.05rem">${esc(q.text)}</p>
+      <div class="row spread"><span class="small muted">Question ${i + 1}</span>${speakBtn(q.text)}</div><p style="font-family:var(--serif);font-size:1.05rem">${esc(q.text)}</p>
       ${done.has(q.id) ? '<span class="chip leaf">✓ Recorded</span>' : `<div class="row"><button class="btn sm primary" data-action="answer" data-qid="${q.id}" data-pid="${subject.id}">Write</button><button class="btn sm" data-action="answer" data-qid="${q.id}" data-pid="${subject.id}" data-rec="audio">🎙️ Voice</button><button class="btn sm" data-action="answer" data-qid="${q.id}" data-pid="${subject.id}" data-rec="video">🎥 Video</button></div>`}
     </div>`).join('')}`);
   $('#legacy-who').onchange = (e) => { closeSheet(); actions.legacy({ pid: e.target.value }); };
@@ -1591,6 +1690,7 @@ function viewMe(root) {
       <button class="btn block primary" data-action="store">🛍️ Store & unlock codes</button>
       <button class="btn block" data-action="share">📤 Share with family & friends</button>
       <button class="btn block" data-action="backup">💾 Backup & share family file</button>
+      <button class="btn block" data-action="display">Aa  Text size & display</button>
       <button class="btn block" data-action="switch-profile">👥 Switch / add profile</button>
       <button class="btn block" data-action="help-resources">🆘 Support lines</button>
       <button class="btn block ghost" data-action="install-help">📲 Install on your phone</button>
@@ -1922,6 +2022,8 @@ async function handleURL() {
 
 (async function start() {
   await load();
+  devicePrefs = { ...DEFAULT_PREFS, ...(await db.getKV('prefs', {})) };
+  applyPrefs();
   await handleURL();
   await render();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {

@@ -39,6 +39,7 @@ Memories are stored **on the device**. Back up often, and send the family file t
 | Letters for later | Sealed until a date or occasion (graduation, wedding, "when you miss me") |
 | Games | How Well Do You Know…? (built from real answers) and Would You Rather. **Paid pack:** Family Trivia (built from the tree), Two Truths & a Lie, Story Chain. |
 | Help packs (paid) | Digital Parent Help, Children Help, Family Help (includes caring through illness and grief) |
+| Text & display (Aa button) | Four text sizes, easy-read letters (Atkinson Hyperlegible, designed for low vision), bold text, extra contrast, less motion, and 🔊 read-aloud buttons for questions. One-tap presets: "Easy on the eyes" for older eyes and "Kid friendly". Settings are saved per person, so Grandpa can have huge text while the kids keep normal. All colors meet the WCAG AA contrast standard (at least 4.5:1). |
 | Profiles | Several family members can share one phone or tablet |
 | Backup and sync | Export and import a family file. Imports merge without creating duplicates. |
 

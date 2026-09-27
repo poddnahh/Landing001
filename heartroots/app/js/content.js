@@ -225,11 +225,11 @@ export const STORY_STARTERS = [
 
 // Mood check-in scale.
 export const MOODS = [
-  { key: 'great', emoji: '😄', label: 'Great' },
-  { key: 'good', emoji: '🙂', label: 'Good' },
-  { key: 'okay', emoji: '😐', label: 'Okay' },
-  { key: 'low', emoji: '😔', label: 'Low' },
-  { key: 'hard', emoji: '😢', label: 'Having a hard time' },
+  { key: 'great', emoji: '😄', label: 'Great', short: 'Great' },
+  { key: 'good', emoji: '🙂', label: 'Good', short: 'Good' },
+  { key: 'okay', emoji: '😐', label: 'Okay', short: 'Okay' },
+  { key: 'low', emoji: '😔', label: 'Low', short: 'Low' },
+  { key: 'hard', emoji: '😢', label: 'Having a hard time', short: 'Hard' },
 ];
 
 export const RELATIONS = [
